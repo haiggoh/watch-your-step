@@ -1,0 +1,93 @@
+{
+  "_comment": "watch-your-step rules. Data, not code: add a rule here plus a should_flag and a should_pass case in tests/cases.json. context = which parts of the command the pattern sees: bare (unquoted shell), squote, dquote, heredoc_quoted (<<'EOF' body, literal), heredoc_unquoted (<<EOF body, expanded), raw (the whole command). check = regex (default) or a named builtin check. shells = only for these login shells (empty = all). tools = tool names the rule applies to.",
+  "rules": [
+    {
+      "id": "shell/backtick-in-dquote",
+      "severity": "block",
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["dquote", "heredoc_unquoted"],
+      "pattern": "`",
+      "message": "a backtick inside a double-quoted string (or an unquoted <<EOF heredoc) is command substitution: the code span is replaced by the output of running it, and the command still exits 0.",
+      "fix": "single-quote the prose, use a quoted heredoc (<<'EOF'), or escape each backtick as \\`",
+      "incident": "2026-09-27, two waypoint bullets silently corrupted"
+    },
+    {
+      "id": "shell/dollar-digit-in-dquote",
+      "severity": "warn",
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["dquote", "heredoc_unquoted"],
+      "pattern": "\\$[0-9]",
+      "message": "a literal like \"$40\" or \"$0\" inside double quotes is a positional parameter: it expands (usually to nothing) and the text changes silently.",
+      "fix": "single-quote the text, or escape it as \\$40",
+      "incident": "2026-09-27, a waypoint bullet lost its dollar amount"
+    },
+    {
+      "id": "path/home-typo",
+      "severity": "block",
+      "tools": ["Bash", "Read", "Write", "Edit", "MultiEdit", "NotebookEdit"],
+      "shells": [],
+      "context": ["raw"],
+      "check": "home_typo",
+      "message": "this path names a home directory that is not yours. Models rebuild a path from token pieces each time they write it, so the user name can come out mistyped; the tool then reports a missing FILE, never a wrong DIRECTORY.",
+      "fix": "write the path as ~/... (native file tools accept it) or $HOME/... in shell, never the expanded home directory",
+      "incident": "2026-10-24, a free-lane session wrote two different misspellings of the user name in absolute paths"
+    },
+    {
+      "id": "shell/truncate-before-read",
+      "severity": "block",
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["raw"],
+      "check": "truncate_before_read",
+      "message": "this command truncates a file before it reads it (`cmd f > f`, or python open(p, \"w\") ... open(p).read()): the shell or python empties the file first, so the read sees nothing and the file is destroyed while the command reports success.",
+      "fix": "write to a temp file and move it over the original (preserving its mode), or edit in place with the Edit tool",
+      "incident": "file-rewrite trap, recorded in the shell one-liners memory"
+    },
+    {
+      "id": "zsh/equals-word",
+      "severity": "block",
+      "tools": ["Bash"],
+      "shells": ["zsh"],
+      "context": ["bare"],
+      "check": "equals_word",
+      "message": "in zsh an unquoted word starting with '=' (like ==== or ==) is EQUALS expansion: zsh looks it up as a command, fails with '=== not found', and aborts the REST of the command line.",
+      "fix": "quote it ('====') or use a different separator such as '----'",
+      "incident": "2026-09-30, and again 2026-10-24: a probe's later stages never ran"
+    },
+    {
+      "id": "zsh/pipestatus",
+      "severity": "warn",
+      "tools": ["Bash"],
+      "shells": ["zsh"],
+      "context": ["bare", "dquote"],
+      "pattern": "PIPESTATUS",
+      "message": "${PIPESTATUS[0]} is a bash-ism; the Bash tool here runs zsh, where it is empty, so an exit-status check built on it always passes.",
+      "fix": "in zsh use $pipestatus[1] (lower case, 1-based), or run the pipeline under bash explicitly",
+      "incident": "2026-10-19, memguard phase 4"
+    },
+    {
+      "id": "shell/grep-F-anchor",
+      "severity": "warn",
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["raw"],
+      "pattern": "grep\\s+(?:-[A-Za-z]*F[A-Za-z]*|--fixed-strings)(?:\\s+-\\S+)*\\s+['\"]?\\^",
+      "message": "grep -F treats ^ as a literal character, so an anchored needle can never match and the search silently finds nothing.",
+      "fix": "drop -F and escape the needle, or drop the ^ anchor",
+      "incident": "2026-10-16"
+    },
+    {
+      "id": "zsh/unquoted-var-for",
+      "severity": "warn",
+      "tools": ["Bash"],
+      "shells": ["zsh"],
+      "context": ["bare"],
+      "pattern": "\\bfor\\s+\\w+\\s+in\\s+\\$\\w+",
+      "message": "zsh does NOT word-split an unquoted $var, so `for f in $files` runs ONCE with the whole list as one argument.",
+      "fix": "use ${=files} or an array (files=(...); for f in $files), or read lines with ${(f)files}",
+      "incident": "2026-10-16, free-agents release: a loop processed one 'file'"
+    }
+  ]
+}

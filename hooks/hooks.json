@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash|Read|Write|Edit|MultiEdit|NotebookEdit",
+       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/watch-your-step.py\" check", "timeout": 10}]}
+    ]
+  }
+}

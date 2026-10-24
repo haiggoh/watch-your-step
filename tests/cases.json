@@ -1,0 +1,57 @@
+{
+  "_comment": "Every rule needs at least one should_flag and one should_pass case (tests enforce it). Commands are the tool input as the model writes it. HOMEUSER is replaced by the real user name and OTHERUSER by a near-miss of it at test time.",
+  "cases": [
+    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "waypoints.py edit x --point \"run `make test` first\""},
+    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "cat > notes.md <<EOF\nuse `rtk` here\nEOF"},
+    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit -m \"fix: the `foo` helper\""},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "waypoints.py edit x --point 'run `make test` first'"},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "cat > notes.md <<'EOF'\nuse `rtk` here, and \"quoted `spans`\" too\nEOF"},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "echo \"escaped \\`span\\` stays literal\""},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "d=`date +%F`; echo \"$d\""},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "git commit -m \"fix: a $(echo ok) thing\" # wys:allow shell/backtick-in-dquote `x`"},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "echo \"use `rtk` here\" # wys:allow shell/backtick-in-dquote"},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "git commit -m \"$(cat <<'EOF'\nfix: the `foo` helper costs $40 (see `bar`)\nEOF\n)\""},
+    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "gh pr create --title \"t\" --body \"$(cat <<'EOF'\n## The bug\n| a | `b` |\nEOF\n)\" && echo done"},
+    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit -m \"$(cat <<EOF\nfix: the `foo` helper\nEOF\n)\""},
+    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "echo \"version: $(python3 -c \"import json;print(json.load(open('p.json'))['version'])\")\"; echo \"=== surfaces ===\""},
+    {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "x=\"$(echo hi)\"; echo ===="},
+    {"rule": "shell/dollar-digit-in-dquote", "expect": "pass", "tool": "Bash", "command": "gh pr create --body \"$(cat <<'EOF'\ncosts $40 a day\nEOF\n)\""},
+
+    {"rule": "shell/dollar-digit-in-dquote", "expect": "flag", "tool": "Bash", "command": "waypoints.py add \"budget is $40 per day\""},
+    {"rule": "shell/dollar-digit-in-dquote", "expect": "pass", "tool": "Bash", "command": "waypoints.py add 'budget is $40 per day'"},
+    {"rule": "shell/dollar-digit-in-dquote", "expect": "pass", "tool": "Bash", "command": "waypoints.py add \"budget is \\$40 per day\""},
+
+    {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "ls /Users/OTHERUSER/ClaudeWorkspace/cost-tracker"},
+    {"rule": "path/home-typo", "expect": "flag", "tool": "Read", "file_path": "/Users/OTHERUSER/.claude/projects/x/memory/a.md"},
+    {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "cat ~/.claude/projects/-Users-OTHERUSER/memory/a.md"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/HOMEUSER/ClaudeWorkspace ~/x $HOME/y"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Read", "file_path": "/Users/HOMEUSER/.claude/CLAUDE.md"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/Shared/x"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "cat ~/.claude/projects/-Users-HOMEUSER-ClaudeWorkspace-echoprism/x.jsonl"},
+
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "sed 's/a/b/' config.txt > config.txt"},
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "cat notes.md | grep -v x > notes.md"},
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "python3 -c \"open(p,'w').write(open(p).read().replace('a','b'))\""},
+    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' config.txt > config.txt.tmp && mv config.txt.tmp config.txt"},
+    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "sort a.txt >> a.txt.log; cmd 2>&1 > out.txt"},
+    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "python3 -c \"s=open(p).read(); open(p,'w').write(s.replace('a','b'))\""},
+
+    {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "ls; echo ====; ls -la"},
+    {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "[ \"$a\" == \"b\" ] && echo same"},
+    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "ls; echo '===='; echo \"====\"; echo ----"},
+    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "[[ $a == b ]] && x=1 && git log --format=%H a=b"},
+    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "echo ===="},
+
+    {"rule": "zsh/pipestatus", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "pytest | tail -3; echo \"exit ${PIPESTATUS[0]}\""},
+    {"rule": "zsh/pipestatus", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "pytest | tail -3; echo \"exit $pipestatus[1]\""},
+    {"rule": "zsh/pipestatus", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "pytest | tail -3; echo \"exit ${PIPESTATUS[0]}\""},
+
+    {"rule": "shell/grep-F-anchor", "expect": "flag", "tool": "Bash", "command": "grep -F '^## [0.4' CHANGELOG.md"},
+    {"rule": "shell/grep-F-anchor", "expect": "flag", "tool": "Bash", "command": "grep -qF \"^version\" plugin.json"},
+    {"rule": "shell/grep-F-anchor", "expect": "pass", "tool": "Bash", "command": "grep -F '## [0.4' CHANGELOG.md; grep -E '^## ' CHANGELOG.md"},
+
+    {"rule": "zsh/unquoted-var-for", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "files=$(git ls-files); for f in $files; do wc -l $f; done"},
+    {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "for f in ${=files}; do wc -l $f; done; for f in a b; do :; done"},
+    {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "for f in $files; do wc -l $f; done"}
+  ]
+}
