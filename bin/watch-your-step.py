@@ -222,10 +222,80 @@ def check_equals_word(texts, **_):
     return False
 
 
+# ---- state-aware git checks: they look at the repo itself, so they only fire when the trap is real --
+
+MARKER = re.compile(r"^(?:<{7}|>{7})(?: |$)", re.M)
+CACHE_DIRS = ("__pycache__/", ".pytest_cache/", ".ruff_cache/", ".mypy_cache/", ".venv/", "venv/",
+              "node_modules/", "dist/", "build/", ".DS_Store")
+
+
+def git(args, cwd):
+    import subprocess
+    p = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=3)
+    return p.stdout if p.returncode == 0 else None
+
+
+def resolve_dir(before, git_c, cwd):
+    """The directory a git invocation runs in: the payload cwd, moved by the last unquoted `cd X`
+    before it, then by `git -C X`. None when a path is quoted or does not exist (then: no verdict)."""
+    d = cwd or os.getcwd()
+    for step in [m.group(1) for m in re.finditer(r"(?:^|[\s;&|(])cd\s+([^\s;&|()]+)", before)][-1:] + ([git_c] if git_c else []):
+        if "Q" == step or "$" in step:
+            return None
+        d = os.path.normpath(os.path.join(d, os.path.expanduser(step)))
+    return d if os.path.isdir(d) else None
+
+
+GIT_FINISH = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+(?:rebase\s+--continue|merge\s+--continue|cherry-pick\s+--continue|commit)\b")
+
+
+def check_staged_conflict_markers(texts, bare_view, cwd=None, **_):
+    for m in GIT_FINISH.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if not d:
+            continue
+        staged = git(["diff", "--cached", "-U0", "--no-color"], d) or ""
+        if MARKER.search("\n".join(line[1:] for line in staged.splitlines() if line.startswith("+"))):
+            return True
+        # `git add f && git rebase --continue` in ONE command: f is not staged yet when this runs
+        for add in re.finditer(r"\bgit(?:\s+-C\s+\S+)?\s+add\s+([^;&|]+)", bare_view[: m.start()]):
+            for path in add.group(1).split():
+                full = os.path.join(d, path)
+                if path.startswith("-") or not os.path.isfile(full):
+                    continue
+                try:
+                    with open(full, encoding="utf-8", errors="replace") as f:
+                        if MARKER.search(f.read()):
+                            return True
+                except OSError:
+                    continue
+    return False
+
+
+WORKTREE_REMOVE = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+worktree\s+remove\s+(?:(?:--force|-f)\s+)*([^\s;&|]+)")
+
+
+def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
+    for m in WORKTREE_REMOVE.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if not d or m.group(3) == "Q":
+            continue
+        target = os.path.normpath(os.path.join(d, os.path.expanduser(m.group(3))))
+        if not os.path.isdir(target):
+            continue
+        out = git(["status", "--porcelain", "--ignored"], target) or ""
+        ignored = [ln[3:] for ln in out.splitlines() if ln.startswith("!! ")]
+        if [p for p in ignored if not any(c in p for c in CACHE_DIRS) and not p.endswith(".pyc")]:
+            return True
+    return False
+
+
 CHECKS = {
     "home_typo": check_home_typo,
     "truncate_before_read": check_truncate_before_read,
     "equals_word": check_equals_word,
+    "staged_conflict_markers": check_staged_conflict_markers,
+    "worktree_remove_ignored": check_worktree_remove_ignored,
 }
 
 
@@ -234,7 +304,7 @@ def load_rules(path=None):
         return json.load(f)["rules"]
 
 
-def evaluate(tool, tool_input, shell=None, user=None, rules=None):
+def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None):
     """Return the rules a tool call trips, in rules-file order."""
     rules = load_rules() if rules is None else rules
     shell = shell or os.environ.get("WATCH_YOUR_STEP_SHELL") or os.path.basename(os.environ.get("SHELL", "sh"))
@@ -260,7 +330,10 @@ def evaluate(tool, tool_input, shell=None, user=None, rules=None):
             continue
         texts = [t for ctx in rule["context"] for t in parts[ctx]]
         if "check" in rule:
-            fired = CHECKS[rule["check"]](texts, bare_view=view, user=user)
+            try:
+                fired = CHECKS[rule["check"]](texts, bare_view=view, user=user, cwd=cwd)
+            except Exception:  # a check that cannot decide (git missing, timeout) never blocks
+                fired = False
         else:
             fired = any(re.search(rule["pattern"], t) for t in texts)
         if fired:
@@ -295,7 +368,8 @@ def hook_output(hits):
 def cmd_check():
     try:
         payload = json.load(sys.stdin)
-        result = hook_output(evaluate(payload.get("tool_name", ""), payload.get("tool_input") or {}))
+        result = hook_output(evaluate(payload.get("tool_name", ""), payload.get("tool_input") or {},
+                                      cwd=payload.get("cwd")))
     except Exception as e:  # fail open: our bug must never stall a session
         sys.stderr.write(f"{MARK}: internal error, call allowed ({type(e).__name__}: {e})\n")
         return 0

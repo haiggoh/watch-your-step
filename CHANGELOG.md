@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0] - 2026-10-24
+
+- Two state-aware git rules. They inspect the repository at hook time instead of matching text, following
+  `cd X` and `git -C X`:
+  - `git/staged-conflict-markers` (block): a commit or `rebase/merge/cherry-pick --continue` that would record
+    `<<<<<<<` / `>>>>>>>` lines, including files that a `git add` earlier in the SAME command is about to stage.
+  - `git/worktree-remove-ignored` (warn): `git worktree remove` on a worktree that holds gitignored files other
+    than caches, which removal deletes for good.
+- Tested against real temporary repositories (`tests/test_git_rules.py`), including a mutation check. A check
+  that cannot decide (no git, a quoted path, a timeout) never blocks.
+
 ## [0.1.1] - 2026-10-24
 
 - `docs/incidents.md`: the real incident behind each rule, moved here from the author's notes so the rule

@@ -88,6 +88,30 @@
       "message": "zsh does NOT word-split an unquoted $var, so `for f in $files` runs ONCE with the whole list as one argument.",
       "fix": "use ${=files} or an array (files=(...); for f in $files), or read lines with ${(f)files}",
       "incident": "2026-10-16, free-agents release: a loop processed one 'file'"
+    },
+    {
+      "id": "git/staged-conflict-markers",
+      "severity": "block",
+      "stateful": true,
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["raw"],
+      "check": "staged_conflict_markers",
+      "message": "this commit / rebase --continue would record conflict markers (<<<<<<< or >>>>>>> lines) as the resolution: staging a still-conflicted file marks it resolved, git succeeds, and every later reader of the file gets garbage.",
+      "fix": "resolve the markers in the file, re-stage it, and check with  git diff --cached --check  before continuing",
+      "incident": "2026-10-14, a plugin manifest reached public main with conflict markers inside; every installer then saw the old version"
+    },
+    {
+      "id": "git/worktree-remove-ignored",
+      "severity": "warn",
+      "stateful": true,
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["raw"],
+      "check": "worktree_remove_ignored",
+      "message": "this worktree holds gitignored files (not caches) that `git worktree remove` deletes for good; 'clean and merged' hides them, because status --porcelain does not list ignored files.",
+      "fix": "list them with  git -C <worktree> status --porcelain --ignored , compare each with history or the main checkout, and copy anything unique OUTSIDE the repo first",
+      "incident": "2026-10-19, a removed worktree held the only copy of a plan's progress ledger"
     }
   ]
 }

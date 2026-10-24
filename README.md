@@ -21,7 +21,7 @@ is command substitution: the code span is replaced by the output of running it, 
   (intended? end the command with  # wys:allow <rule-id>)
 ```
 
-## Rules in 0.1.0
+## Rules
 
 | Rule | Severity | Catches |
 |---|---|---|
@@ -33,6 +33,12 @@ is command substitution: the code span is replaced by the output of running it, 
 | `zsh/pipestatus` | warn (zsh) | `${PIPESTATUS[0]}`, which is always empty under zsh |
 | `shell/grep-F-anchor` | warn | `grep -F '^…'`, which can never match |
 | `zsh/unquoted-var-for` | warn (zsh) | `for f in $files`: zsh doesn't word-split it |
+| `git/staged-conflict-markers` | block | a commit or `rebase/merge/cherry-pick --continue` that would record `<<<<<<<` / `>>>>>>>` lines, including files named by a `git add` earlier in the same command |
+| `git/worktree-remove-ignored` | warn | `git worktree remove` on a worktree holding gitignored files that aren't caches, which removal deletes for good |
+
+The two `git/` rules are **state-aware**: instead of matching text, they look at the repository at hook time
+(the staged diff, the worktree's ignored files), following `cd X` and `git -C X`, so they only speak
+when the trap is real. If they can't decide (no git, a quoted path, a timeout), they say nothing.
 
 Rules are **data** (`rules/rules.json`), and every rule ships with a should-flag and a should-pass case
 (`tests/cases.json`). A mutation test proves that each flag case is caught by its own rule. Before 0.1.0 shipped,

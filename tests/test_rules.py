@@ -34,7 +34,8 @@ def tool_input(case):
 
 
 def test_every_rule_has_a_flag_and_a_pass_case():
-    for rule in RULES:
+    """Stateful rules (their verdict depends on repo state) are proven in test_git_rules.py instead."""
+    for rule in (r for r in RULES if not r.get("stateful")):
         kinds = {c["expect"] for c in CASES if c["rule"] == rule["id"]}
         assert kinds == {"flag", "pass"}, f"{rule['id']} needs both a flag and a pass case, has {kinds}"
 
@@ -63,7 +64,7 @@ def test_case(case):
         assert case["rule"] not in ids, f"{case['rule']} fired on a safe command"
 
 
-@pytest.mark.parametrize("rule", RULES, ids=lambda r: r["id"])
+@pytest.mark.parametrize("rule", [r for r in RULES if not r.get("stateful")], ids=lambda r: r["id"])
 def test_mutation_each_flag_case_depends_on_its_own_rule(rule):
     """Neutralise ONE rule: every flag case written for it must stop firing it, so a case can never
     pass because of the wrong mechanism (a green suite that would also be green with the rule broken)."""

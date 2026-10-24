@@ -49,6 +49,24 @@ the empty output nearly read as "nothing found". This happened twice in a month 
 read returns an empty string and the file is destroyed while the line reports success. `sed … f > f` and
 `cat f | … > f` do the same in the shell: the redirect empties `f` before the command reads it.
 
+## git/staged-conflict-markers
+
+During a rebase, staging a still-conflicted file records the marker content as the resolution: git marks it
+resolved, `--continue` succeeds, and nothing complains. A plugin's `plugin.json` reached a public main branch
+this way. Every version-fetching installer then read garbage at the HEAD manifest and quietly fell back
+to the old version, so the fresh release looked like an unrelated updater bug. The tag was immutable;
+it was fixed forward. The usual shape was `git add plugin.json && git rebase --continue` in ONE command,
+which is why the rule also reads the files a preceding `git add` names: they aren't staged yet when the
+hook runs. Only `<<<<<<<` and `>>>>>>>` lines count, since a bare `=======` is a valid markdown heading underline.
+
+## git/worktree-remove-ignored
+
+"Clean and merged" means `git status --porcelain` is empty, and that view hides ignored files. During a cleanup,
+three merged worktrees had ignored content; one held the ONLY copy of a plan's progress ledger
+(`.superpowers/sdd/<plan>/progress.md`). Removing a worktree deletes such files for good. Caches
+(`__pycache__`, `.venv`, `node_modules`, `dist/`…) are excluded, so the warning only appears when something
+might be unique.
+
 ## zsh/pipestatus, zsh/unquoted-var-for, shell/grep-F-anchor
 
 Three ways a check can pass without checking anything, each met while shipping a release:
