@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1] - 2026-10-24
+
+- `docs/incidents.md`: the real incident behind each rule, moved here from the author's notes so the rule
+  and its evidence live in one place. No behaviour change.
+
 ## [0.1.0] - 2026-10-24
 
 First release. A PreToolUse hook that checks each Bash command, and each Read/Write/Edit path, before it runs.
