@@ -1,0 +1,9 @@
+{
+  "_comment": "How rtc-ship.sh ships THIS repo. Data lives here; commands live in .rtc/. A repo with no .rtc/ directory is fully supported - hooks are opt-in by presence.",
+  "tag_prefix": "v",
+  "manifest": ".claude-plugin/plugin.json",
+  "changelog": "CHANGELOG.md",
+  "refresh_plugin": "watch-your-step",
+  "default_branch": "main",
+  "test_cmd": "bash tests/test_version_consistency.sh && pytest -q tests"
+}

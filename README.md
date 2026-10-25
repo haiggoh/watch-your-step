@@ -35,10 +35,12 @@ is command substitution: the code span is replaced by the output of running it, 
 | `zsh/unquoted-var-for` | warn (zsh) | `for f in $files`: zsh doesn't word-split it |
 | `git/staged-conflict-markers` | block | a commit or `rebase/merge/cherry-pick --continue` that would record `<<<<<<<` / `>>>>>>>` lines, including files named by a `git add` earlier in the same command |
 | `git/worktree-remove-ignored` | warn | `git worktree remove` on a worktree holding gitignored files that aren't caches, which removal deletes for good |
+| `zsh/unmatched-glob` | warn (zsh) | a bare glob matching nothing, which aborts the whole command line before anything runs |
 
-The two `git/` rules are **state-aware**: instead of matching text, they look at the repository at hook time
-(the staged diff, the worktree's ignored files), following `cd X` and `git -C X`, so they only speak
-when the trap is real. If they can't decide (no git, a quoted path, a timeout), they say nothing.
+The `git/` rules and `zsh/unmatched-glob` are **state-aware**: instead of matching text, they look at the
+repository or the filesystem at hook time (the staged diff, the worktree's ignored files, whether each glob
+expands), following `cd X` and `git -C X`, so they only speak when the trap is real. If they can't decide
+(no git, a quoted path, a timeout, a variable inside the pattern), they say nothing.
 
 Rules are **data** (`rules/rules.json`), and every rule ships with a should-flag and a should-pass case
 (`tests/cases.json`). A mutation test proves that each flag case is caught by its own rule. Before 0.1.0 shipped,

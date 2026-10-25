@@ -1,7 +1,7 @@
 {
   "name": "watch-your-step",
-  "version": "0.2.0",
-  "description": "🥾 Catches command traps BEFORE a tool call runs: a backtick or $40 inside double quotes, a mistyped home directory, a file truncated before it is read, zsh's '====' abort, bash-isms under zsh, a commit that would record conflict markers, a worktree removal that would destroy ignored files. Rules are data with tests; silent-corruption traps are blocked with the exact fix, the rest are warnings, and one visible '# wys:allow <rule>' overrides a single command.",
+  "version": "0.3.0",
+  "description": "🥾 Catches command traps BEFORE a tool call runs: a backtick or $40 inside double quotes, a mistyped home directory, a file truncated before it is read, zsh's '====' abort, a bare glob that matches nothing, bash-isms under zsh, a commit that would record conflict markers, a worktree removal that would destroy ignored files. Rules are data with tests; silent-corruption traps are blocked with the exact fix, the rest are warnings, and one visible '# wys:allow <rule>' overrides a single command.",
   "author": { "name": "Heiko Brantsch" },
   "homepage": "https://github.com/haiggoh/watch-your-step",
   "license": "MIT",

@@ -1,6 +1,6 @@
 ---
 name: watch-your-step
-description: "Use when a 🥾 watch-your-step message blocks or warns about a tool call, when a shell command silently lost text or did nothing (a backtick or $ inside double quotes, zsh aborting on '====', a mistyped home path, a file emptied by its own redirect), or when the user asks to add, tune, override or list a command-trap rule."
+description: "Use when a 🥾 watch-your-step message blocks or warns about a tool call, when a shell command silently lost text or did nothing (a backtick or $ inside double quotes, zsh aborting on '====' or on a glob that matches nothing, a mistyped home path, a file emptied by its own redirect), or when the user asks to add, tune, override or list a command-trap rule."
 ---
 
 # 🥾 watch-your-step

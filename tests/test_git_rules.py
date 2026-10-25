@@ -13,6 +13,7 @@ wys = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wys)
 RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
 TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored"}
+TESTED_ELSEWHERE = {"zsh/unmatched-glob"}  # proven in tests/test_unmatched_glob.py
 MARKED = "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n"
 
 
@@ -36,8 +37,8 @@ def fired(cmd, cwd, rule):
     return rule in {h["id"] for h in wys.evaluate("Bash", {"command": cmd}, shell="zsh", user="t", rules=RULES, cwd=str(cwd))}
 
 
-def test_every_stateful_rule_is_tested_here():
-    assert {r["id"] for r in RULES if r.get("stateful")} == TESTED
+def test_every_stateful_rule_has_state_based_tests():
+    assert {r["id"] for r in RULES if r.get("stateful")} == TESTED | TESTED_ELSEWHERE
 
 
 def test_commit_with_staged_markers_is_blocked(repo):

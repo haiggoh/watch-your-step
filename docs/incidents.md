@@ -43,6 +43,21 @@ accounts and `/Users/Shared` pass.
 the empty output nearly read as "nothing found". This happened twice in a month to the same author.
 `[ "$a" == "b" ]` fails the same way in zsh; `[[ … == … ]]` is safe.
 
+## zsh/unmatched-glob
+
+A `find A /tmp/la-*` probe: the glob matched nothing, zsh printed its only output —
+`(eval):1: no matches found: /tmp/la-*` — and aborted the ENTIRE command line before any
+stage ran. The empty output nearly read as "no logs exist"; nothing had executed at all. A
+compound probe is worse: stages that DID run coexist with stages that silently never did,
+so a "no results" verdict gets manufactured from nothing. `2>/dev/null` does not rescue the
+line, and neither does `||` — zsh refuses before they are ever reached. Bash is unaffected
+(it passes the literal pattern on to the tool), which is why the rule is zsh-only. Because
+a glob that matches something is harmless, the rule checks the payload's actual `cwd`
+(following the command's own `cd`) instead of trusting the text, and stays quiet when
+expansion would succeed. The 0.3.0 replay over 1,059 real commands found the shape again:
+a ledger-existence probe written as `ls .../cost-ledger/deadbeef* || echo "no ledger file
+written"` — whose fallback echo could never have run.
+
 ## shell/truncate-before-read
 
 `open(p, "w").write(open(p).read().replace(...))` opens for writing first, which truncates the file, so the

@@ -52,6 +52,13 @@
 
     {"rule": "zsh/unquoted-var-for", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "files=$(git ls-files); for f in $files; do wc -l $f; done"},
     {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "for f in ${=files}; do wc -l $f; done; for f in a b; do :; done"},
-    {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "for f in $files; do wc -l $f; done"}
+    {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "for f in $files; do wc -l $f; done"},
+
+    {"rule": "zsh/unmatched-glob", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "ls *.wys-no-such-files.zzz"},
+    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "find . -name '*.log' -exec grep -l foo {} +"},
+    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "rm *.log(N)"},
+    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "setopt NULL_GLOB; ls *.wys-no-such-files.zzz"},
+    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "case $args in *\"/var/folders/\"*) echo hit;; *) echo no;; esac"},
+    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "ls *.wys-no-such-files.zzz"}
   ]
 }

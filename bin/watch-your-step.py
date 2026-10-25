@@ -21,6 +21,7 @@ Environment:
 The hook FAILS OPEN: any internal error lets the tool call through and is reported on stderr.
 """
 import getpass
+import glob
 import json
 import os
 import re
@@ -290,12 +291,45 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
     return False
 
 
+# ---- stateful zsh check: a glob that matches nothing aborts the whole command line ----
+
+GLOB_WORD = re.compile(r"[^\s;&|<>()\[\]{}\"'`]+")
+GLOB_QUALIFIED = re.compile(r"[^\s;&|<>()\[\]{}\"'`]*[*?][^\s;&|<>()\[\]{}\"'`]*\([A-Za-z,]+\)")
+BRACE_WORD = re.compile(r"\S*\{[^{}]*\}\S*")
+
+
+def check_unmatched_glob(texts, bare_view, cwd=None, **_):
+    """True when a bare glob would expand to nothing: zsh then refuses to run the command
+    at all ('no matches found'), so every stage of the line silently never executes."""
+    if not bare_view or ("*" not in bare_view and "?" not in bare_view):
+        return False
+    if re.search(r"\bsetopt\b[^\n;&|]*\bNULL_GLOB\b", bare_view) or re.match(r"\s*noglob\b", bare_view):
+        return False
+    view = re.sub(r"\[\[.*?\]\]", " ", bare_view, flags=re.S)  # a [[ ]] pattern matches a string, not the fs
+    view = re.sub(r"\bcase\b.*?\besac\b", " ", view, flags=re.S)  # so does a case PATTERN
+    view = GLOB_QUALIFIED.sub(" ", view)                        # *.log(N) is deliberately null-globbed
+    view = BRACE_WORD.sub(" ", view)                           # brace expansion cannot be resolved here
+    for m in GLOB_WORD.finditer(view):
+        word = m.group(0)
+        if ("*" not in word and "?" not in word) or re.search(r"[$Q`]", word):
+            continue  # a quoted span or a variable inside the word makes the expansion unknowable
+        d = resolve_dir(view[: m.start()], None, cwd)  # the command's own `cd X` moves the glob's base
+        if d is None:
+            continue
+        pattern = os.path.expanduser(word)
+        target = pattern if os.path.isabs(pattern) else os.path.join(d, pattern)
+        if not glob.glob(target, recursive=True):
+            return True
+    return False
+
+
 CHECKS = {
     "home_typo": check_home_typo,
     "truncate_before_read": check_truncate_before_read,
     "equals_word": check_equals_word,
     "staged_conflict_markers": check_staged_conflict_markers,
     "worktree_remove_ignored": check_worktree_remove_ignored,
+    "unmatched_glob": check_unmatched_glob,
 }
 
 

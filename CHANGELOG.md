@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0] - 2026-10-25
+
+- `zsh/unmatched-glob` (warn, zsh-only): a bare glob that matches nothing aborts the whole
+  command line BEFORE anything runs — the only output is "no matches found", and earlier or
+  simultaneous stages (including a `||` fallback) silently never execute. State-aware like
+  the git rules: it expands each bare glob against the payload's `cwd`, following the
+  command's own `cd X` through the same resolver, and stays quiet when the glob matches, so
+  it speaks only when zsh would really refuse. `[[ ]]` and `case` patterns, quoted spans,
+  variables, brace words, `(N)`-qualified globs and `setopt NULL_GLOB` are all left alone.
+- Proven in `tests/test_unmatched_glob.py` against real directories (the stateful-rule
+  convention), plus cwd-independent cases in `tests/cases.json`; mutation-checked both ways
+  (a never-fire check and a qualifier-blind check each turn the right tests red).
+- Replay-checked over 1,059 real commands from four recent sessions: the first pass found
+  two false-positive classes (a glob after `cd X`, a `case` pattern), both fixed with
+  replay-shaped regression cases; every remaining hit is either a true catch of the exact
+  incident shape (a `2>/dev/null`-guarded probe whose `||` fallback zsh never runs) or a
+  correct verdict against today's filesystem.
+- `rtc-ship.json` added so `rtc-ship.sh` can ship this repo (its own
+  `test_version_consistency.sh` plus the pytest suite as the gate).
+
 ## [0.2.0] - 2026-10-24
 
 - Two state-aware git rules. They inspect the repository at hook time instead of matching text, following

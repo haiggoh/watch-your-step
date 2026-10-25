@@ -112,6 +112,18 @@
       "message": "this worktree holds gitignored files (not caches) that `git worktree remove` deletes for good; 'clean and merged' hides them, because status --porcelain does not list ignored files.",
       "fix": "list them with  git -C <worktree> status --porcelain --ignored , compare each with history or the main checkout, and copy anything unique OUTSIDE the repo first",
       "incident": "2026-10-19, a removed worktree held the only copy of a plan's progress ledger"
+    },
+    {
+      "id": "zsh/unmatched-glob",
+      "severity": "warn",
+      "stateful": true,
+      "tools": ["Bash"],
+      "shells": ["zsh"],
+      "context": ["raw"],
+      "check": "unmatched_glob",
+      "message": "a bare glob that matches nothing ABORTS the whole zsh command line before anything runs: the only output is '(eval):N: no matches found', and earlier or simultaneous stages silently never execute.",
+      "fix": "quote the pattern when the TOOL should expand it (find . -name '*.log', grep --include), add the (N) glob qualifier, or setopt NULL_GLOB in the same command",
+      "incident": "2026-10-20, a find A /tmp/la-* probe was killed by its glob and the empty output nearly read as 'no logs exist'"
     }
   ]
 }
