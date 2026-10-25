@@ -123,3 +123,22 @@ def test_help_and_unknown_flag():
     assert h.returncode == 0 and "check" in h.stdout and "WATCH_YOUR_STEP_DISABLE" in h.stdout
     bad = run_hook("", "--bogus")
     assert bad.returncode == 2 and "usage" in bad.stderr.lower()
+
+
+def test_a_check_may_return_a_detail_string(monkeypatch):
+    """A builtin check may return a non-empty string instead of True: the string is appended
+    to the rendered message, so a stateful rule can say how big the danger is."""
+    monkeypatch.setitem(wys.CHECKS, "detail_probe", lambda texts, **k: "3 files stay behind")
+    rule = {"id": "t/detail", "severity": "warn", "tools": ["Bash"], "shells": [],
+            "context": ["raw"], "check": "detail_probe", "message": "base message.",
+            "fix": "f", "incident": "i"}
+    hits = wys.evaluate("Bash", {"command": "anything"}, shell="zsh", user=USER, rules=[rule])
+    assert "base message. 3 files stay behind" in wys.render(hits)
+
+
+def test_an_empty_detail_string_is_no_hit(monkeypatch):
+    monkeypatch.setitem(wys.CHECKS, "detail_probe", lambda texts, **k: "")
+    rule = {"id": "t/detail", "severity": "warn", "tools": ["Bash"], "shells": [],
+            "context": ["raw"], "check": "detail_probe", "message": "base message.",
+            "fix": "f", "incident": "i"}
+    assert wys.evaluate("Bash", {"command": "anything"}, shell="zsh", user=USER, rules=[rule]) == []

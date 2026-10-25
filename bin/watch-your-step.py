@@ -323,6 +323,128 @@ def check_unmatched_glob(texts, bare_view, cwd=None, **_):
     return False
 
 
+# ---- new rules (0.4.0): dirty worktrees, argv leaks, stashes that skip untracked ----
+
+WORKTREE_ADD = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+worktree\s+add\b")
+
+
+def dirty_paths(d, untracked_only=False):
+    """The real (non-cache) dirty paths of the repo at d: staged, unstaged and untracked —
+    or untracked only. [] when clean, None when git cannot answer (then: no verdict)."""
+    out = git(["status", "--porcelain"], d)
+    if out is None:
+        return None
+    paths = []
+    for ln in out.splitlines():
+        if untracked_only and not ln.startswith("?? "):
+            continue
+        p = ln[3:]
+        if p and not any(c in p for c in CACHE_DIRS) and not p.endswith(".pyc"):
+            paths.append(p)
+    return paths
+
+
+def check_worktree_add_dirty(texts, bare_view, cwd=None, **_):
+    for m in WORKTREE_ADD.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if not d:
+            continue
+        real = dirty_paths(d) or []
+        if real:
+            n = len(real)
+            return f"{n} uncommitted file{'s' if n != 1 else ''} stay behind in the source checkout."
+    return False
+
+
+PS_WRAPPERS = {"sudo", "env", "nohup", "command", "xargs"}
+PS_ARGV_AUX = re.compile(r"^-{0,2}aux")
+PS_ARGV_O_SPEC = re.compile(r"(?:^|,)(?:args|command)(?:=|$)")
+
+
+def _ps_argv_args(toks):
+    """(argument tokens, command token) when a token IS a ps/pgrep invocation in command
+    position, else (None, None): `echo ps aux` is not one."""
+    for i, t in enumerate(toks):
+        if t in ("ps", "pgrep") or t.endswith(("/ps", "/pgrep")):
+            if all(s in PS_WRAPPERS or re.fullmatch(r"[A-Za-z_]\w*=\S*", s) for s in toks[:i]):
+                return toks[i + 1:], t
+    return None, None
+
+
+def check_ps_argv(texts, bare_view, **_):
+    for view in texts:
+        for seg in re.split(r"&&|\|\||[;|\n]|\|", view):
+            args, cmd = _ps_argv_args(seg.split())
+            if args is None:
+                continue
+            if cmd == "pgrep" or cmd.endswith("/pgrep"):
+                if any(t.startswith("-") and re.fullmatch(r"-{1,2}[A-Za-z]+", t)
+                       and ("a" in t or "l" in t) for t in args):
+                    return True
+                continue
+            for i, t in enumerate(args):
+                if PS_ARGV_AUX.match(t):
+                    return True
+                if not t.startswith("-"):
+                    continue
+                letters = t.lstrip("-")
+                if ("e" in letters and "f" in letters) or "ww" in letters:
+                    return True
+                if letters == "format" or letters.endswith("o"):
+                    spec = args[i + 1] if i + 1 < len(args) else ""
+                    if PS_ARGV_O_SPEC.search(spec):
+                        return True
+                if re.fullmatch(r"-o(?:args|command)=?", t):
+                    return True
+    return False
+
+
+STASH = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+stash\b")
+STASH_SAFE_SUB = {"list", "show", "pop", "apply", "drop", "clear", "branch", "create"}
+STASH_UNTRACKED_SAFE = {"-u", "--include-untracked", "--all", "-a"}
+
+
+def check_stash_untracked(texts, bare_view, cwd=None, **_):
+    for m in STASH.finditer(bare_view):
+        toks = re.split(r"[;&|\n]", bare_view[m.end():])[0].split()
+        if toks and toks[0] in STASH_SAFE_SUB:
+            continue
+        args = toks[1:] if toks and toks[0] in ("push", "save") else toks
+        if any(t in STASH_UNTRACKED_SAFE for t in args):
+            continue
+        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if not d:
+            continue
+        if dirty_paths(d, untracked_only=True):
+            return True
+    return False
+
+
+ARG_LIST_CMDS = re.compile(r"\b(?:grep|find|ls|rm|cp|mv|cat|wc)\b")
+UNQUOTED_ARG_VAR = re.compile(r"\$(?![{(])(?![_0-9])[A-Za-z]\w*(?![\w/.,\[])")
+FOR_LOOP_VAR = re.compile(r"\bfor\s+([A-Za-z_]\w*)\s+in\b")
+
+
+def check_unquoted_var_arglist(texts, bare_view=None, **_):
+    """zsh passes an unquoted $var as ONE argument (no word splitting): a multi-path
+    argument list becomes a single nonexistent path, and with stderr discarded the search
+    reads as a clean empty result. Loop variables and ${=x} / arrays are exempt."""
+    loopvars = set()
+    for t in list(texts) + [bare_view or ""]:
+        loopvars |= {m.group(1) for m in FOR_LOOP_VAR.finditer(t)}
+    for view in texts:
+        for seg in re.split(r"&&|\|\||[;|\n]|\|", view):
+            if not re.search(r"2>\s*/dev/null", seg):
+                continue
+            m = ARG_LIST_CMDS.search(seg)
+            if not m:
+                continue
+            for v in UNQUOTED_ARG_VAR.finditer(seg):
+                if v.start() > m.start() and v.group(0)[1:] not in loopvars:
+                    return True
+    return False
+
+
 CHECKS = {
     "home_typo": check_home_typo,
     "truncate_before_read": check_truncate_before_read,
@@ -330,6 +452,10 @@ CHECKS = {
     "staged_conflict_markers": check_staged_conflict_markers,
     "worktree_remove_ignored": check_worktree_remove_ignored,
     "unmatched_glob": check_unmatched_glob,
+    "worktree_add_dirty": check_worktree_add_dirty,
+    "ps_argv": check_ps_argv,
+    "stash_untracked": check_stash_untracked,
+    "unquoted_var_arglist": check_unquoted_var_arglist,
 }
 
 
@@ -371,7 +497,7 @@ def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None):
         else:
             fired = any(re.search(rule["pattern"], t) for t in texts)
         if fired:
-            hits.append(rule)
+            hits.append({**rule, "detail": fired} if isinstance(fired, str) else rule)
     return hits
 
 
@@ -379,7 +505,8 @@ def render(hits):
     lines = []
     for h in hits:
         verdict = "✖ BLOCKED" if h["severity"] == "block" else "⚠ warning"
-        lines.append(f"{MARK}: {verdict} — {h['message']}")
+        msg = h["message"] + (f" {h['detail']}" if h.get("detail") else "")
+        lines.append(f"{MARK}: {verdict} — {msg}")
         lines.append(f"  fix: {h['fix']}")
         lines.append(f"  rule: {h['id']} · incident {h['incident']}")
     lines.append("  (intended? end the command with  # wys:allow <rule-id>)")

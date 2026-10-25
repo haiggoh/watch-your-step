@@ -89,3 +89,42 @@ Three ways a check can pass without checking anything, each met while shipping a
 once in zsh with the whole list as one argument, so a per-file loop "processed one file". And `grep -F '^## [0.4'`
 could never match, because `-F` makes `^` a literal character, so a version probe reported "not found" for a
 version that was there.
+
+## git/worktree-add-dirty
+
+The standard workflow here creates one worktree per change and assumes the source checkout is clean:
+"repo on `main`, clean" is the precondition of every handoff. Nothing guarded it. A `git worktree add` from a
+checkout with staged, unstaged or untracked files succeeds, and the new tree silently starts from HEAD — the
+uncommitted work stays behind, and a session that continues in the new tree believes it is editing work that
+isn't there. A 2026-10-25 coverage grep across 16 plugin roots found no rule (memory, instruction file, hook or
+skill) covering the shape, while the session that found it executes in exactly this pattern every day. The
+message names the count, so a 40-file checkout reads differently from a one-file one, and cache noise
+(`.DS_Store`, `__pycache__`…) is excluded so the warning only appears when real work stays behind.
+
+## secrets/ps-argv
+
+`ps aux`, `ps -ef`, `ps -o args` and `pgrep -a`/`-l` print the full command line of every matching process —
+including any API key a tool was handed on its argv. The replay that proved this rule is its own evidence: a
+single day of ordinary session work contained 23 such invocations in 1,788 commands, most of them probing
+claude/remote-session/litellm processes. A warning is the right severity — the command is often legitimate —
+but the fix names the argv-free forms (`ps -o pid,lstart,comm -p <pids>`, `pgrep -x <name>`), which the
+session-liveness work that shares these transcripts already uses.
+
+## git/stash-untracked
+
+`git stash` without `-u` stashes tracked changes only and leaves untracked files in the working tree while
+reporting success — the stash looks like "everything is saved". The memory rule "tracked ≠ recoverable" was
+written after uncommitted work was lost to exactly this blind spot, and worktrees here additionally share one
+stash stack between every concurrent session, which is why the rule suggests the more visible alternative: a
+named WIP checkpoint branch. The rule is state-aware — it fires only when untracked files actually exist,
+cache noise excluded — so a stash on a clean tree stays silent.
+
+## zsh/unquoted-var-arglist
+
+`roots=$(cat list | tr '\n' ' ')`, then `grep -rliE "$pat" $roots 2>/dev/null`: zsh does not word-split an
+unquoted parameter, so grep received ONE nonexistent path ("a.md b.md c.md"), `2>/dev/null` swallowed
+"No such file", and all 17 patterns printed nothing — including a planted positive control known to be
+present. The failure was first misattributed to a grep-rewriting hook; only isolating single-file vs list
+invocation exposed the cause. The rule requires the `2>/dev/null` in the same command (the trap is the SILENT
+empty result, not the expansion itself), exempts `for`-loop variables, `${=var}` and array forms, and the fix
+reminds that every negative search needs a planted positive control (observation 0046).

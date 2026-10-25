@@ -36,14 +36,19 @@ is command substitution: the code span is replaced by the output of running it, 
 | `git/staged-conflict-markers` | block | a commit or `rebase/merge/cherry-pick --continue` that would record `<<<<<<<` / `>>>>>>>` lines, including files named by a `git add` earlier in the same command |
 | `git/worktree-remove-ignored` | warn | `git worktree remove` on a worktree holding gitignored files that aren't caches, which removal deletes for good |
 | `zsh/unmatched-glob` | warn (zsh) | a bare glob matching nothing, which aborts the whole command line before anything runs |
+| `git/worktree-add-dirty` | warn | `git worktree add` from a checkout with uncommitted files: the new tree starts from HEAD and they stay behind |
+| `secrets/ps-argv` | warn | `ps aux` / `-ef` / `-ww` / `-o args` / `-o command`, `pgrep -a` / `-l` / `-fl`: full process arguments can carry API keys into the transcript |
+| `git/stash-untracked` | warn | a bare `git stash` (no `-u` / `-a`) with untracked files present: they are not stashed, and a later clean or checkout can destroy them |
+| `zsh/unquoted-var-arglist` | warn (zsh) | `cmd $files 2>/dev/null`: zsh passes the whole list as ONE argument, and the failure reads as a clean empty result |
 
 The `git/` rules and `zsh/unmatched-glob` are **state-aware**: instead of matching text, they look at the
-repository or the filesystem at hook time (the staged diff, the worktree's ignored files, whether each glob
-expands), following `cd X` and `git -C X`, so they only speak when the trap is real. If they can't decide
-(no git, a quoted path, a timeout, a variable inside the pattern), they say nothing.
+repository or the filesystem at hook time (the staged diff, the worktree's ignored files, the checkout's dirty
+paths, whether each glob expands), following `cd X` and `git -C X`, so they only speak when the trap is real. If
+they can't decide (no git, a quoted path, a timeout, a variable inside the pattern), they say nothing.
 
-Rules are **data** (`rules/rules.json`), and every rule ships with a should-flag and a should-pass case
-(`tests/cases.json`). A mutation test proves that each flag case is caught by its own rule. Before 0.1.0 shipped,
+Rules are **data** (`rules/rules.json`), and every rule ships with should-flag and should-pass cases
+(`tests/cases.json`; the state-aware rules are proven in `tests/test_git_rules.py` against real temporary
+repositories). A mutation test proves that each flag case is caught by its own rule. Before 0.1.0 shipped,
 the engine was replayed over 2,184 real tool calls from four working sessions: no false block, and it found a
 waypoint bullet that had silently lost a `` `claude -p` `` span (that command ran when the note was written).
 

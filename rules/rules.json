@@ -124,6 +124,52 @@
       "message": "a bare glob that matches nothing ABORTS the whole zsh command line before anything runs: the only output is '(eval):N: no matches found', and earlier or simultaneous stages silently never execute.",
       "fix": "quote the pattern when the TOOL should expand it (find . -name '*.log', grep --include), add the (N) glob qualifier, or setopt NULL_GLOB in the same command",
       "incident": "2026-10-20, a find A /tmp/la-* probe was killed by its glob and the empty output nearly read as 'no logs exist'"
+    },
+    {
+      "id": "git/worktree-add-dirty",
+      "severity": "warn",
+      "stateful": true,
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["raw"],
+      "check": "worktree_add_dirty",
+      "message": "git worktree add starts the new worktree from HEAD, not from the working tree: the source checkout's uncommitted files stay behind, and the new tree will not contain them.",
+      "fix": "commit a WIP checkpoint in the source checkout first, or copy the paths across deliberately after the add",
+      "incident": "2026-10-25, playbook-rules plan: the coverage grep found no hook guarding worktree-dirty while the standard workflow assumes clean sources"
+    },
+    {
+      "id": "secrets/ps-argv",
+      "severity": "warn",
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["bare"],
+      "check": "ps_argv",
+      "message": "ps/pgrep output that includes full process arguments (aux, -ef, -ww, -o args/command, pgrep -a/-l/-fl) can carry API keys from a command line into the transcript.",
+      "fix": "ps -o pid,lstart,comm -p <pids>, or pgrep -x <name>: identify processes without widening the output to argv",
+      "incident": "2026-10-25 handoff standing rule: never print process argv — a key handed to a child process on its command line lands in the output"
+    },
+    {
+      "id": "git/stash-untracked",
+      "severity": "warn",
+      "stateful": true,
+      "tools": ["Bash"],
+      "shells": [],
+      "context": ["raw"],
+      "check": "stash_untracked",
+      "message": "git stash without -u / --include-untracked / -a leaves untracked files in the working tree while the stash looks like it saved everything; a later clean or checkout can then destroy them.",
+      "fix": "git stash -u, or commit to a named WIP checkpoint branch instead — a branch is more visible than a stash",
+      "incident": "backup-before-editing-uncommitted-work: tracked ≠ recoverable, and untracked work is the part a plain stash silently omits"
+    },
+    {
+      "id": "zsh/unquoted-var-arglist",
+      "severity": "warn",
+      "tools": ["Bash"],
+      "shells": ["zsh"],
+      "context": ["bare"],
+      "check": "unquoted_var_arglist",
+      "message": "zsh does not word-split an unquoted $var, so `cmd $files 2>/dev/null` passes the whole list as ONE argument (usually a nonexistent path); with stderr discarded the failure reads as a clean empty result.",
+      "fix": "use ${=files} or an array ($files[@]), or xargs; never trust an empty search that hides its own stderr without a planted positive control",
+      "incident": "2026-10-25, observation 0046: 17 coverage greps printed nothing, including the planted positive control"
     }
   ]
 }

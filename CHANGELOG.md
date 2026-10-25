@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0] - 2026-10-25
+
+- Four warn rules, two of them state-aware (they inspect the repository at hook time like
+  the earlier git rules, following `cd X` and `git -C X`):
+  - `git/worktree-add-dirty`: `git worktree add` from a checkout with uncommitted files —
+    the new tree starts from HEAD, and the message names how many files stay behind
+    (builtin checks may now return a detail string that is appended to their message).
+  - `git/stash-untracked`: a bare `git stash` / `git stash push` without
+    `-u` / `--include-untracked` / `-a` while untracked files exist — they are left in the
+    working tree while the stash looks like it saved everything.
+  - `secrets/ps-argv`: `ps aux` / `-ef` / `-ww` / `-o args` / `-o command` and
+    `pgrep -a` / `-l` / `-fl` — full process arguments can carry API keys from a command
+    line into the transcript; the fix names the argv-free forms
+    (`ps -o pid,lstart,comm -p <pids>`, `pgrep -x <name>`).
+  - `zsh/unquoted-var-arglist` (zsh-only, from observation 0046): an unquoted `$var` passed
+    as an argument to a file-consuming command together with `2>/dev/null` — zsh passes the
+    whole list as ONE argument and the failure reads as a clean empty result. Loop variables,
+    `${=var}`, arrays and bash scripts are exempt.
+- Proven like the earlier rules: red-first cases in `tests/cases.json` (the two stateful
+  rules in `tests/test_git_rules.py`, against real temporary repositories), mutation-checked
+  (each flag case is caught by its own rule; each new git check monkeypatched to False turns
+  its tests red).
+- Replay-checked over 1,788 real commands from ten recent transcripts: 27 hits, all true
+  catches — 23 argv-revealing ps/pgrep invocations and four runs of the observation-0046
+  `grep … $roots 2>/dev/null` probe itself. Zero false positives, and the safe twins in the
+  same corpus (`ps -o lstart=`, `pgrep -f` alone, a quoted `"$pat"`, loop variables) stayed
+  silent. Five replay-shaped regression cases pin those shapes.
+
 ## [0.3.0] - 2026-10-25
 
 - `zsh/unmatched-glob` (warn, zsh-only): a bare glob that matches nothing aborts the whole
