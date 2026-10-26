@@ -103,7 +103,7 @@
     },
     {
       "id": "git/worktree-remove-ignored",
-      "severity": "warn",
+      "severity": "block",
       "stateful": true,
       "tools": ["Bash"],
       "shells": [],

@@ -242,12 +242,41 @@ CACHE_DIRS = ("__pycache__/", ".pytest_cache/", ".ruff_cache/", ".mypy_cache/", 
 CACHE_PARTS = {c[:-1] for c in CACHE_DIRS if c.endswith("/")}
 
 
-def _is_cache_path(p):
+def _is_cache_path(p, root=None):
     """True for cache noise only: a .pyc file, .DS_Store, or a path whose DIRECTORY components
-    (never the file itself) are a known cache dir — 'venv/x' is cache, 'myvenv/plan.md' is not."""
-    parts = p.split("/")
-    return (".DS_Store" in parts or p.endswith(".pyc")
-            or any(part in CACHE_PARTS for part in parts[:-1]))
+    (never the file itself) are a known cache dir — 'venv/x' is cache, 'myvenv/plan.md' is not.
+
+    `root` opts into INSPECTING a collapsed directory: a trailing slash means git judged the whole
+    dir ignorable — 'sub/' when sub/ holds only a .DS_Store — so the name alone cannot tell a
+    Finder-junk dir from a real one, and the dir must be looked at. Callers that pass no root keep
+    the name-only judgement, which is what the stash rule's untracked-list filter needs.
+    """
+    if not p.endswith("/"):
+        parts = p.split("/")
+        return (".DS_Store" in parts or p.endswith(".pyc")
+                or any(part in CACHE_PARTS for part in parts[:-1]))
+    # 'venv/' — the last component IS the directory (git collapsed it), so unlike the file case
+    # above it must not be skipped by parts[:-1]; 'myvenv/x' still is not cache.
+    name = p[:-1].split("/")[-1]
+    if root:
+        return _dir_is_all_cache(os.path.join(root, p[:-1]))
+    return name in CACHE_PARTS
+
+
+def _dir_is_all_cache(d):
+    """True when a directory holds nothing but cache noise (or is empty)."""
+    try:
+        entries = [e for e in os.listdir(d) if e not in (".", "..")]
+    except OSError:
+        return False
+    for e in entries:
+        full = os.path.join(d, e)
+        if os.path.isdir(full):
+            if not _dir_is_all_cache(full):
+                return False
+        elif not _is_cache_path(e):      # the FILE branch, not the dir branch
+            return False
+    return True
 
 
 def git(args, cwd):
@@ -313,9 +342,16 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
         target = os.path.normpath(os.path.join(d, os.path.expanduser(m.group(3))))
         if not os.path.isdir(target):
             continue
-        out = git(["status", "--porcelain", "--ignored"], target) or ""
-        ignored = [ln[3:] for ln in out.splitlines() if ln.startswith("!! ")]
-        if [p for p in ignored if not _is_cache_path(p)]:
+        # Both '!! ' (ignored) and '?? ' (untracked) paths. The two matter for different reasons,
+        # measured: with --untracked-files=all git names '?? sub/the-only-copy.md' directly, and
+        # WITHOUT it the collapsed '?? sub/' still blocks — because a collapsed dir is judged by
+        # INSPECTING it (_is_cache_path(root=…)). Two independent routes, both required: the
+        # second is what carries this rule if -uall is ever dropped, and neither alone covers a
+        # .DS_Store-only dir.
+        out = git(["status", "--porcelain", "--untracked-files=all", "--ignored"], target) or ""
+        risky = [ln[3:] for ln in out.splitlines()
+                 if ln.startswith(("!! ", "?? ")) and not _is_cache_path(ln[3:], root=target)]
+        if risky:
             return True
     return False
 

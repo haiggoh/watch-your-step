@@ -1,3 +1,27 @@
+## [0.4.1] - 2026-10-26
+
+- `git/worktree-remove-ignored` promoted from **warn to block**. It detected the doomed worktree
+  correctly and the removal still happened: `bin/watch-your-step.py`'s emit path gives
+  `permissionDecision: deny` only for `severity: "block"`, and this rule was `warn`, so it
+  produced additionalContext while the destructive call proceeded. Measured on 2026-10-26: a
+  session removed a worktree whose `.superpowers/sdd/` plan ledger existed nowhere else — the
+  second time this exact loss happened, after the 2026-10-19 incident the rule already cited.
+  Five sibling rules (including the other git rule, `git/staged-conflict-markers`) already block,
+  so the block path is proven here; this rule was simply never promoted.
+- Tests: the compound and piped form that caused the loss now asserts the **deny** is emitted,
+  not merely that the rule fires — that second assertion is the one that would have stopped it.
+  The matcher needed no change: it already scans the whole command string, verified by running
+  the real command shape through the module.
+  The matcher was never the problem, and neither was the `.DS_Store` handling: both were
+  already correct. What the investigation DID find, by testing them:
+  - a directory git collapses (`?? sub/`) was judged on its NAME alone, so a real file
+    beside a `.DS_Store` could be missed. Collapsed dirs are now INSPECTED, which also
+    fixes `venv/` — the last component is the directory itself, so `parts[:-1]` skipping it
+    was wrong for the stash rule's untracked-list filter too (a latent bug this exposed).
+  - `--untracked-files=all` names the file directly, but the collapsed route is what would
+    carry the rule if that flag were ever dropped, so a test pins THAT route specifically:
+    with the flag removed, blinding the directory inspection is caught.
+
 # Changelog
 
 ## [0.4.0] - 2026-10-25
