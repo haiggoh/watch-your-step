@@ -10,23 +10,38 @@
   - `git/stash-untracked`: a bare `git stash` / `git stash push` without
     `-u` / `--include-untracked` / `-a` while untracked files exist — they are left in the
     working tree while the stash looks like it saved everything.
-  - `secrets/ps-argv`: `ps aux` / `-ef` / `-ww` / `-o args` / `-o command` and
-    `pgrep -a` / `-l` / `-fl` — full process arguments can carry API keys from a command
-    line into the transcript; the fix names the argv-free forms
-    (`ps -o pid,lstart,comm -p <pids>`, `pgrep -x <name>`).
-  - `zsh/unquoted-var-arglist` (zsh-only, from observation 0046): an unquoted `$var` passed
-    as an argument to a file-consuming command together with `2>/dev/null` — zsh passes the
-    whole list as ONE argument and the failure reads as a clean empty result. Loop variables,
-    `${=var}`, arrays and bash scripts are exempt.
+  - `secrets/ps-argv`: `ps aux`/`ax` / `-ef` or `-e -f` / `-ww` / `-o args`/`command`/`cmd`
+    and `pgrep -a` / `-fl` / `--list-full` — full process arguments can carry API keys from
+    a command line into the transcript; the fix names the argv-free forms
+    (`ps -o pid,lstart,comm -p <pids>`, `pgrep -x <name>`). Bare `pgrep -l` is NOT flagged:
+    it prints the process name only.
+  - `zsh/unquoted-var-arglist` (zsh-only, from observation 0046): an unquoted `$var` (or
+    `${var}`) passed as an argument to a file-consuming command whose command word it is,
+    together with a hidden stderr (`2>/dev/null`, `&>`, `>/dev/null 2>&1`, `2>&-`) — zsh
+    passes the whole list as ONE argument and the failure reads as a clean empty result.
+    Loop variables (from their loop onward), same-command array assignments, `${=var}`,
+    `$arr[@]` and bash scripts are exempt.
 - Proven like the earlier rules: red-first cases in `tests/cases.json` (the two stateful
   rules in `tests/test_git_rules.py`, against real temporary repositories), mutation-checked
   (each flag case is caught by its own rule; each new git check monkeypatched to False turns
   its tests red).
+- Hardened by a cross-family adversarial review (DeepSeek V4.1 Flash; 20 findings, each
+  verified against the engine before fixing): the pgrep `-l` false positive; `ps -e -f` /
+  `ps ax` / top-level `$(ps …)` / wrapper (`time`, `sudo -u root`) false negatives; `${var}`,
+  bare-array and command-position fixes in the arglist rule; cache-noise matched by path
+  component (`venv/` is cache, `myvenv/plan.md` is not); `git stash store` safe; a preceding
+  `git stash -u` in the same command accepted; a cd inside `( )` / `$( )` no longer moves the
+  resolved repo. Each fix red-first; suite 135 → 158.
 - Replay-checked over 1,788 real commands from ten recent transcripts: 27 hits, all true
   catches — 23 argv-revealing ps/pgrep invocations and four runs of the observation-0046
   `grep … $roots 2>/dev/null` probe itself. Zero false positives, and the safe twins in the
   same corpus (`ps -o lstart=`, `pgrep -f` alone, a quoted `"$pat"`, loop variables) stayed
-  silent. Five replay-shaped regression cases pin those shapes.
+  silent. Five replay-shaped regression cases pin those shapes. Re-replayed after the review
+  fixes over the ten most recent transcripts (771 commands): 24 hits, all classified — ten
+  argv-revealing ps/pgrep forms (several caught by the new `ax` and `$( )` shapes, from
+  concurrent live sessions' real work), a confirmed dirty-source worktree add, and twelve
+  pre-existing unmatched-glob aborts; zero false positives, and the widened arglist patterns
+  produced no hits.
 
 ## [0.3.0] - 2026-10-25
 

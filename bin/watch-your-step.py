@@ -180,6 +180,17 @@ def split_command(cmd):
             pending = []
             at_word_start = True
             continue
+        if c == "$" and cmd.startswith("$(", i):
+            # a top-level command substitution is its own command line too: rules with a bare
+            # context also see the inner command in command position. The body itself still
+            # streams into this view, so glob/redirect checks keep seeing everything they saw.
+            end = subshell_end(cmd, i + 2)
+            _, sub = split_command(cmd[i + 2:end])
+            for k in CONTEXTS:
+                if k != "raw":
+                    parts[k].extend(sub[k])
+            i += 2
+            continue
         bare.append(c)
         at_word_start = c in " \t\n;&|()"
         i += 1
@@ -228,6 +239,15 @@ def check_equals_word(texts, **_):
 MARKER = re.compile(r"^(?:<{7}|>{7})(?: |$)", re.M)
 CACHE_DIRS = ("__pycache__/", ".pytest_cache/", ".ruff_cache/", ".mypy_cache/", ".venv/", "venv/",
               "node_modules/", "dist/", "build/", ".DS_Store")
+CACHE_PARTS = {c[:-1] for c in CACHE_DIRS if c.endswith("/")}
+
+
+def _is_cache_path(p):
+    """True for cache noise only: a .pyc file, .DS_Store, or a path whose DIRECTORY components
+    (never the file itself) are a known cache dir — 'venv/x' is cache, 'myvenv/plan.md' is not."""
+    parts = p.split("/")
+    return (".DS_Store" in parts or p.endswith(".pyc")
+            or any(part in CACHE_PARTS for part in parts[:-1]))
 
 
 def git(args, cwd):
@@ -238,9 +258,18 @@ def git(args, cwd):
 
 def resolve_dir(before, git_c, cwd):
     """The directory a git invocation runs in: the payload cwd, moved by the last unquoted `cd X`
-    before it, then by `git -C X`. None when a path is quoted or does not exist (then: no verdict)."""
+    before it, then by `git -C X`. None when a path is quoted or does not exist (then: no verdict).
+    A cd inside ( ) or $( ) cannot outlive its subshell, so those spans are ignored."""
     d = cwd or os.getcwd()
-    for step in [m.group(1) for m in re.finditer(r"(?:^|[\s;&|(])cd\s+([^\s;&|()]+)", before)][-1:] + ([git_c] if git_c else []):
+    stripped, i, n = [], 0, len(before)
+    while i < n:
+        if before[i] == "(":
+            i = subshell_end(before, i + 1) + 1
+            stripped.append(" ")
+            continue
+        stripped.append(before[i])
+        i += 1
+    for step in [m.group(1) for m in re.finditer(r"(?:^|[\s;&|(])cd\s+([^\s;&|()]+)", "".join(stripped))][-1:] + ([git_c] if git_c else []):
         if "Q" == step or "$" in step:
             return None
         d = os.path.normpath(os.path.join(d, os.path.expanduser(step)))
@@ -286,7 +315,7 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
             continue
         out = git(["status", "--porcelain", "--ignored"], target) or ""
         ignored = [ln[3:] for ln in out.splitlines() if ln.startswith("!! ")]
-        if [p for p in ignored if not any(c in p for c in CACHE_DIRS) and not p.endswith(".pyc")]:
+        if [p for p in ignored if not _is_cache_path(p)]:
             return True
     return False
 
@@ -339,7 +368,7 @@ def dirty_paths(d, untracked_only=False):
         if untracked_only and not ln.startswith("?? "):
             continue
         p = ln[3:]
-        if p and not any(c in p for c in CACHE_DIRS) and not p.endswith(".pyc"):
+        if p and not _is_cache_path(p):
             paths.append(p)
     return paths
 
@@ -350,23 +379,29 @@ def check_worktree_add_dirty(texts, bare_view, cwd=None, **_):
         if not d:
             continue
         real = dirty_paths(d) or []
-        if real:
+        # a preceding `git stash -u` in the SAME command empties the source checkout first
+        if real and not re.search(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|]*(?:-u|--include-untracked|-a|--all)\b",
+                                  bare_view[: m.start()]):
             n = len(real)
-            return f"{n} uncommitted file{'s' if n != 1 else ''} stay behind in the source checkout."
+            return (f"{n} uncommitted path{'s' if n != 1 else ''} "
+                    f"{'stay' if n != 1 else 'stays'} behind in the source checkout.")
     return False
 
 
-PS_WRAPPERS = {"sudo", "env", "nohup", "command", "xargs"}
-PS_ARGV_AUX = re.compile(r"^-{0,2}aux")
-PS_ARGV_O_SPEC = re.compile(r"(?:^|,)(?:args|command)(?:=|$)")
+PS_WRAPPERS = {"sudo", "env", "nohup", "command", "exec", "time", "nice", "stdbuf", "setsid", "xargs"}
+PS_ARGV_AUX = re.compile(r"^-{0,2}(?:aux|ax)(?:ww)?$")
+PS_ARGV_O_SPEC = re.compile(r"(?:^|,)(?:args|command|cmd)(?:=|$)")
+PGREP_LIST_FULL = ("--list-full",)
 
 
 def _ps_argv_args(toks):
     """(argument tokens, command token) when a token IS a ps/pgrep invocation in command
-    position, else (None, None): `echo ps aux` is not one."""
+    position, else (None, None): `echo ps aux` is not one. sudo may carry its own flags
+    and value before the command (sudo -u root ps aux)."""
     for i, t in enumerate(toks):
         if t in ("ps", "pgrep") or t.endswith(("/ps", "/pgrep")):
-            if all(s in PS_WRAPPERS or re.fullmatch(r"[A-Za-z_]\w*=\S*", s) for s in toks[:i]):
+            pre = toks[:i]
+            if "sudo" in pre or all(s in PS_WRAPPERS or re.fullmatch(r"[A-Za-z_]\w*=\S*", s) for s in pre):
                 return toks[i + 1:], t
     return None, None
 
@@ -375,32 +410,39 @@ def check_ps_argv(texts, bare_view, **_):
     for view in texts:
         for seg in re.split(r"&&|\|\||[;|\n]|\|", view):
             args, cmd = _ps_argv_args(seg.split())
-            if args is None:
+            if args is None or cmd is None:
                 continue
             if cmd == "pgrep" or cmd.endswith("/pgrep"):
-                if any(t.startswith("-") and re.fullmatch(r"-{1,2}[A-Za-z]+", t)
-                       and ("a" in t or "l" in t) for t in args):
+                # bare -l/--list print the process NAME only; argv needs -a (Linux),
+                # -fl (BSD/Linux) or --list-full
+                letters = "".join(t[1:] for t in args if re.fullmatch(r"-[A-Za-z]+", t))
+                if any(t in PGREP_LIST_FULL for t in args):
+                    return True
+                if "a" in letters or ("l" in letters and "f" in letters):
                     return True
                 continue
+            short = ""
             for i, t in enumerate(args):
                 if PS_ARGV_AUX.match(t):
                     return True
+                if re.fullmatch(r"-[A-Za-z]+", t):
+                    short += t[1:]  # separated short flags: -e -f is the same leak as -ef
                 if not t.startswith("-"):
                     continue
                 letters = t.lstrip("-")
-                if ("e" in letters and "f" in letters) or "ww" in letters:
-                    return True
                 if letters == "format" or letters.endswith("o"):
                     spec = args[i + 1] if i + 1 < len(args) else ""
                     if PS_ARGV_O_SPEC.search(spec):
                         return True
                 if re.fullmatch(r"-o(?:args|command)=?", t):
                     return True
+            if ("e" in short and "f" in short) or "ww" in short:
+                return True
     return False
 
 
 STASH = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+stash\b")
-STASH_SAFE_SUB = {"list", "show", "pop", "apply", "drop", "clear", "branch", "create"}
+STASH_SAFE_SUB = {"list", "show", "pop", "apply", "drop", "clear", "branch", "create", "store"}
 STASH_UNTRACKED_SAFE = {"-u", "--include-untracked", "--all", "-a"}
 
 
@@ -420,27 +462,60 @@ def check_stash_untracked(texts, bare_view, cwd=None, **_):
     return False
 
 
-ARG_LIST_CMDS = re.compile(r"\b(?:grep|find|ls|rm|cp|mv|cat|wc)\b")
-UNQUOTED_ARG_VAR = re.compile(r"\$(?![{(])(?![_0-9])[A-Za-z]\w*(?![\w/.,\[])")
+ARG_LIST_CMDS = ("grep", "find", "ls", "rm", "cp", "mv", "cat", "wc")
+CMD_WRAPPERS = {"sudo", "env", "nohup", "command", "exec", "time", "nice", "stdbuf", "setsid", "xargs"}
+WRAPPER_VALUE_FLAGS = {"-u", "-n"}  # sudo -u USER CMD / nice -n N CMD: the next token is the value
+UNQUOTED_ARG_VAR = re.compile(r"\$(?:\{(?!=)([A-Za-z_]\w*)\}|(?![{(])(?![_0-9])([A-Za-z_]\w*)(?![\w/.,\[]))")
 FOR_LOOP_VAR = re.compile(r"\bfor\s+([A-Za-z_]\w*)\s+in\b")
+ARRAY_ASSIGN = re.compile(r"(?:^|[\s;&|(])([A-Za-z_]\w*)=\(")
+HIDES_STDERR = re.compile(r"2>\s*/dev/null|&>\s*/dev/null|2>>\s*/dev/null|2>&-|(?:^|[\s;&|])>\s*/dev/null\s+2>&1")
+
+
+def _cmd_word(seg):
+    """The segment's command word after skipping env assignments and wrappers — including a
+    wrapper's flag cluster and, for value-taking flags, their value token. None when the
+    segment has no plain command word."""
+    toks = seg.split()
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if re.fullmatch(r"[A-Za-z_]\w*=\S*", t) or t in CMD_WRAPPERS:
+            i += 1
+            continue
+        if t in WRAPPER_VALUE_FLAGS:
+            i += 2
+            continue
+        if t.startswith("-") and i > 0:  # a wrapper's own flag cluster: sudo -l, env -i
+            i += 1
+            continue
+        break
+    if i >= len(toks):
+        return None
+    return toks[i]
 
 
 def check_unquoted_var_arglist(texts, bare_view=None, **_):
     """zsh passes an unquoted $var as ONE argument (no word splitting): a multi-path
     argument list becomes a single nonexistent path, and with stderr discarded the search
-    reads as a clean empty result. Loop variables and ${=x} / arrays are exempt."""
-    loopvars = set()
-    for t in list(texts) + [bare_view or ""]:
-        loopvars |= {m.group(1) for m in FOR_LOOP_VAR.finditer(t)}
+    reads as a clean empty result. Loop variables, same-command array assignments, ${=x}
+    and $arr[@] / ${arr[@]} forms are exempt. Loop and array scoping is sequential: a name
+    only exempts the segments from its for/array onward, never the ones before it."""
+    loopvars, arrays = set(), set()
     for view in texts:
         for seg in re.split(r"&&|\|\||[;|\n]|\|", view):
-            if not re.search(r"2>\s*/dev/null", seg):
+            loopvars |= {m.group(1) for m in FOR_LOOP_VAR.finditer(seg)}
+            arrays |= {m.group(1) for m in ARRAY_ASSIGN.finditer(seg)}
+            if not HIDES_STDERR.search(seg):
                 continue
-            m = ARG_LIST_CMDS.search(seg)
-            if not m:
+            cmd = _cmd_word(seg)
+            if cmd not in ARG_LIST_CMDS:
+                continue
+            m = re.search(r"\b" + cmd + r"\b", seg)
+            if m is None:
                 continue
             for v in UNQUOTED_ARG_VAR.finditer(seg):
-                if v.start() > m.start() and v.group(0)[1:] not in loopvars:
+                name = v.group(1) or v.group(2)
+                if v.start() > m.start() and name not in loopvars and name not in arrays:
                     return True
     return False
 

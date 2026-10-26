@@ -37,7 +37,7 @@ is command substitution: the code span is replaced by the output of running it, 
 | `git/worktree-remove-ignored` | warn | `git worktree remove` on a worktree holding gitignored files that aren't caches, which removal deletes for good |
 | `zsh/unmatched-glob` | warn (zsh) | a bare glob matching nothing, which aborts the whole command line before anything runs |
 | `git/worktree-add-dirty` | warn | `git worktree add` from a checkout with uncommitted files: the new tree starts from HEAD and they stay behind |
-| `secrets/ps-argv` | warn | `ps aux` / `-ef` / `-ww` / `-o args` / `-o command`, `pgrep -a` / `-l` / `-fl`: full process arguments can carry API keys into the transcript |
+| `secrets/ps-argv` | warn | `ps aux`/`ax` / `-ef` or `-e -f` / `-ww` / `-o args`/`command`/`cmd`, `pgrep -a` / `-fl` / `--list-full`: full process arguments can carry API keys into the transcript |
 | `git/stash-untracked` | warn | a bare `git stash` (no `-u` / `-a`) with untracked files present: they are not stashed, and a later clean or checkout can destroy them |
 | `zsh/unquoted-var-arglist` | warn (zsh) | `cmd $files 2>/dev/null`: zsh passes the whole list as ONE argument, and the failure reads as a clean empty result |
 

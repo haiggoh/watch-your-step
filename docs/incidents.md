@@ -98,17 +98,22 @@ checkout with staged, unstaged or untracked files succeeds, and the new tree sil
 uncommitted work stays behind, and a session that continues in the new tree believes it is editing work that
 isn't there. A 2026-10-25 coverage grep across 16 plugin roots found no rule (memory, instruction file, hook or
 skill) covering the shape, while the session that found it executes in exactly this pattern every day. The
-message names the count, so a 40-file checkout reads differently from a one-file one, and cache noise
-(`.DS_Store`, `__pycache__`…) is excluded so the warning only appears when real work stays behind.
+message names the count in `git status --porcelain` paths — a wholly untracked directory counts once, which
+keeps the hook-time git call cheap — so a many-path checkout reads differently from a one-path one, and cache
+noise (`.DS_Store`, `__pycache__`…) is excluded by path component (`venv/` is cache, `myvenv/plan.md` is
+not) so the warning only appears when real work stays behind.
 
 ## secrets/ps-argv
 
-`ps aux`, `ps -ef`, `ps -o args` and `pgrep -a`/`-l` print the full command line of every matching process —
-including any API key a tool was handed on its argv. The replay that proved this rule is its own evidence: a
-single day of ordinary session work contained 23 such invocations in 1,788 commands, most of them probing
-claude/remote-session/litellm processes. A warning is the right severity — the command is often legitimate —
-but the fix names the argv-free forms (`ps -o pid,lstart,comm -p <pids>`, `pgrep -x <name>`), which the
-session-liveness work that shares these transcripts already uses.
+`ps aux`, `ps -ef` (or `-e -f`), `ps -o args` and `pgrep -a` / `-fl` / `--list-full` print the full command
+line of every matching process — including any API key a tool was handed on its argv. Bare `pgrep -l` does
+NOT: on BSD and Linux alike it prints the process name only, and an earlier draft of this rule warned on it
+until the cross-family review caught the false positive (the check now requires `-a`, or `-l` together with
+`-f`). The replay that proved this rule is its own evidence: a single day of ordinary session work contained
+23 such invocations in 1,788 commands, most of them probing claude/remote-session/litellm processes. A
+warning is the right severity — the command is often legitimate — but the fix names the argv-free forms
+(`ps -o pid,lstart,comm -p <pids>`, `pgrep -x <name>`), which the session-liveness work that shares these
+transcripts already uses.
 
 ## git/stash-untracked
 

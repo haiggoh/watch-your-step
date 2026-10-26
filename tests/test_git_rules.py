@@ -107,7 +107,7 @@ def test_worktree_add_from_dirty_checkout_warns_with_count(repo):
     hits = wys.evaluate("Bash", {"command": "git worktree add ../wt-a -b feature"}, shell="zsh",
                         user="t", rules=RULES, cwd=str(repo))
     h = next(h for h in hits if h["id"] == "git/worktree-add-dirty")
-    assert "2 uncommitted files stay behind" in wys.render([h])
+    assert "2 uncommitted paths stay behind" in wys.render([h])
 
 
 def test_worktree_add_from_clean_checkout_passes(repo):
@@ -158,3 +158,41 @@ def test_mutation_new_git_checks_are_what_fire(repo, monkeypatch):
     assert not fired("git worktree add ../wt-x -b f", repo, "git/worktree-add-dirty")
     monkeypatch.setitem(wys.CHECKS, "stash_untracked", lambda *a, **k: False)
     assert not fired("git stash", repo, "git/stash-untracked")
+
+
+def test_stash_follows_cd_and_dash_C(repo, tmp_path):
+    (repo / "new.txt").write_text("untracked\n")
+    assert fired(f"cd {repo} && git stash", tmp_path, "git/stash-untracked")
+    assert fired(f"git -C {repo} stash", tmp_path, "git/stash-untracked")
+
+
+def test_stash_store_passes(repo):
+    (repo / "new.txt").write_text("untracked\n")
+    assert not fired("git stash store HEAD@{0}", repo, "git/stash-untracked")
+
+
+def test_worktree_add_after_stash_untracked_in_same_command_passes(repo):
+    (repo / "new.txt").write_text("untracked\n")
+    assert not fired("git stash -u && git worktree add ../wt -b f", repo, "git/worktree-add-dirty")
+
+
+def test_real_cache_dir_stays_silent_but_cache_like_name_warns(repo):
+    (repo / "venv").mkdir()
+    (repo / "venv" / "x.py").write_text("cache\n")
+    assert not fired("git stash", repo, "git/stash-untracked")
+    (repo / "myvenv").mkdir()
+    (repo / "myvenv" / "plan.md").write_text("the only copy\n")
+    assert fired("git stash", repo, "git/stash-untracked")
+
+
+def test_worktree_add_count_is_singular_and_path_worded(repo):
+    (repo / "wip.txt").write_text("uncommitted\n")
+    hits = wys.evaluate("Bash", {"command": "git worktree add ../wt-s -b feature"}, shell="zsh",
+                        user="t", rules=RULES, cwd=str(repo))
+    h = next(h for h in hits if h["id"] == "git/worktree-add-dirty")
+    assert "1 uncommitted path stays behind" in wys.render([h])
+
+
+def test_subshell_cd_does_not_move_the_repo(repo):
+    (repo / "wip.txt").write_text("uncommitted\n")
+    assert fired("x=$(cd /tmp && pwd); git worktree add ../wt-p -b f", repo, "git/worktree-add-dirty")

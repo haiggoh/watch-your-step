@@ -91,6 +91,24 @@
     {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "cat $files 2>/dev/null"},
     {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "cat > s.sh <<'EOF'\n#!/bin/bash\ncat $files 2>/dev/null\nEOF"},
     {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "cat $files"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE --include=\"*.md\" \"$pat\" $roots 2>/dev/null"}
+    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE --include=\"*.md\" \"$pat\" $roots 2>/dev/null"},
+
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -e -f | grep claude"},
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps ax | grep claude"},
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -ax"},
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -o pid,cmd -p 1"},
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "sudo -u root ps aux"},
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "time ps aux"},
+    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "pgrep --list-full claude"},
+    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep -l claude"},
+    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep --list claude"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat ${roots} 2>/dev/null"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -r x $f 2>/dev/null; for f in a b; do :; done"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat $roots >/dev/null 2>&1"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "dirs=(src tests); grep -rliE pat $dirs 2>/dev/null"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -r x ${arr[@]} 2>/dev/null"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "echo cat $files 2>/dev/null"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat $roots 2>err.log"},
+    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "dirs=\"src tests\"; grep -rliE pat $dirs 2>/dev/null"}
   ]
 }

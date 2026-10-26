@@ -144,7 +144,7 @@
       "shells": [],
       "context": ["bare"],
       "check": "ps_argv",
-      "message": "ps/pgrep output that includes full process arguments (aux, -ef, -ww, -o args/command, pgrep -a/-l/-fl) can carry API keys from a command line into the transcript.",
+      "message": "ps/pgrep output that includes full process arguments (aux/ax, -ef or -e -f, -ww, -o args/command/cmd, pgrep -a / -fl / --list-full) can carry API keys from a command line into the transcript.",
       "fix": "ps -o pid,lstart,comm -p <pids>, or pgrep -x <name>: identify processes without widening the output to argv",
       "incident": "2026-10-25 handoff standing rule: never print process argv — a key handed to a child process on its command line lands in the output"
     },
