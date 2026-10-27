@@ -356,6 +356,131 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
     return False
 
 
+# --- git/branch-delete-unrecoverable: a deletion whose commits would be reachable from nowhere else
+# Measured 2026-10-27 while porting run-to-completion's ship cleanup. `git branch -d` refuses an
+# unmerged branch and `-D` overrides that refusal; `git push --delete` refuses only the branch the
+# REMOTE's HEAD points at, and stops refusing the moment origin/HEAD points elsewhere — which is the
+# shape of a repo that renamed its default after cloning (echoprism ships `master`). Neither case is
+# reachable by the worktree rules above, which look at FILES, not at commit reachability.
+BRANCH_DELETE_LOCAL = re.compile(
+    r"\bgit(\s+-C\s+(\S+))?\s+branch\s+((?:-{1,2}\S+\s+)+)([^\s;&|]+)")
+PUSH_DELETE = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+push\s+([^;&|]+)")
+# Conventional default-branch names, checked as a NAMED pair rather than resolved from the repo:
+# deleting either from a remote breaks every consumer that resolves it, whatever origin/HEAD says.
+# A remote branch that origin/HEAD itself points at is NOT flagged — git refuses that deletion, so
+# nothing would be lost and a warning there is noise over a refusal.
+DEFAULT_NAMES = ("main", "master")
+
+
+def _remote_head(d):
+    """The branch the REMOTE's HEAD points at — the one `git push --delete` refuses to delete.
+    Queried, not read from refs/remotes/origin/HEAD: that ref is written by `git clone` and
+    `git remote set-head` and is absent in a `git init` + `git remote add` repo, and it is the
+    remote's answer that decides the refusal anyway."""
+    out = git(["ls-remote", "--symref", "origin", "HEAD"], d) or ""
+    for ln in out.splitlines():
+        if ln.startswith("ref:"):
+            ref = ln[4:].split("\t")[0].strip()
+            if ref.startswith("refs/heads/"):
+                return ref[len("refs/heads/"):]
+    return None
+
+
+def _remote_sha(d, name):
+    out = git(["ls-remote", "origin", name], d) or ""
+    for ln in out.splitlines():
+        parts = ln.split()
+        if len(parts) >= 2:
+            return parts[0]
+    return None
+
+
+def _holders(d, rev, exclude):
+    """Every ref OTHER than `exclude` whose history already contains `rev`."""
+    out = git(["branch", "-a", "--contains", rev], d) or ""
+    names = []
+    for ln in out.splitlines():
+        n = ln[2:].strip() if ln[:2] in ("* ", "+ ") else ln.strip()
+        if n and n not in exclude:
+            names.append(n)
+    return names
+
+
+def _push_delete(args):
+    """(remote, branch) when these `git push` args delete a remote branch, else None."""
+    toks = [t for t in args.split() if t]
+    if not toks:
+        return None
+    colon = next((t for t in toks if t.startswith(":") and len(t) > 1), None)
+    flagged = any(t in ("--delete", "-d") for t in toks)
+    if not colon and not flagged:
+        return None
+    positional = [t for t in toks if not t.startswith("-") and not t.startswith(":")]
+    if not positional:
+        return None
+    remote = positional[0]
+    name = None
+    for i, t in enumerate(toks[:-1]):
+        if t in ("--delete", "-d") and not toks[i + 1].startswith("-"):
+            name = toks[i + 1]
+            break
+    if name is None and colon:
+        name = colon[1:]
+    if name is None:
+        rest = [t for t in positional if t != remote]
+        name = rest[-1] if rest else None
+    if not name or name.startswith("-"):
+        return None
+    return remote, (name.rsplit(":", 1)[-1] if ":" in name else name)
+
+
+def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, **_):
+    for m in BRANCH_DELETE_LOCAL.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if not d:
+            continue
+        flags = m.group(3).split()
+        if not any(f in ("-d", "-D", "--delete") for f in flags):
+            continue                      # `git branch -v`, `--show-current`: not a deletion
+        name = m.group(4)
+        if not name or name.startswith("-"):
+            continue                      # a quoted or missing name: no verdict
+        if git(["rev-parse", "--verify", "--quiet", f"refs/heads/{name}"], d) is None:
+            continue                      # no such local branch: git errors, nothing is lost
+        if name in DEFAULT_NAMES:
+            return True                   # the default branch itself: never delete it
+        # No separate merged-into-the-default test: if a branch's tip is an ancestor of the default
+        # branch, the default branch IS a holder, so `_holders` already covers it. Removing that
+        # check was measured to leave the suite green — a branch nothing can exercise.
+        if _holders(d, name, {name}):
+            continue                      # another local branch or origin/<name> still holds it
+        return True
+    for m in PUSH_DELETE.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if not d:
+            continue
+        target = _push_delete(m.group(3))
+        if not target:
+            continue
+        remote, name = target
+        if not name or name.startswith("-"):
+            continue
+        head = _remote_head(d)
+        if head is not None and name == head:
+            continue                      # git refuses it: nothing would be lost, no verdict
+        sha = _remote_sha(d, name)
+        if sha is None:
+            continue                      # not on the remote: git errors, nothing is lost
+        if name in DEFAULT_NAMES:
+            # A conventional default the remote's HEAD no longer points at: git permits it, and it
+            # breaks every consumer that resolves that name even though the local copy survives.
+            return True
+        if _holders(d, sha, {f"{remote}/{name}", name}):
+            continue                      # a local branch or another ref already holds the commits
+        return True
+    return False
+
+
 # ---- stateful zsh check: a glob that matches nothing aborts the whole command line ----
 
 GLOB_WORD = re.compile(r"[^\s;&|<>()\[\]{}\"'`]+")
@@ -567,6 +692,7 @@ CHECKS = {
     "ps_argv": check_ps_argv,
     "stash_untracked": check_stash_untracked,
     "unquoted_var_arglist": check_unquoted_var_arglist,
+    "branch_delete_unrecoverable": check_branch_delete_unrecoverable,
 }
 
 

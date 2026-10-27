@@ -1,3 +1,36 @@
+## [0.4.2] - 2026-10-28
+
+- **New rule `git/branch-delete-unrecoverable` (block).** `git branch -D` overrides git's own
+  unmerged-branch refusal, and `git push --delete` refuses only the branch the *remote's* HEAD
+  points at — a protection that stops applying the moment `origin/HEAD` points elsewhere, which is
+  the shape of a repo that renamed its default after cloning. Neither case is reachable by the
+  existing `worktree` rules, which look at FILES rather than at commit reachability. The rule fires
+  when a deletion would leave the commits reachable from no other ref, and never where git itself
+  refuses the deletion (a warning over a git refusal is noise, not protection).
+  Found while porting run-to-completion's ship cleanup into `rtc-ship.sh`, where the same
+  reachability gap is what its own `in_wt` guard exists to close — see its 0.9.0 CHANGELOG.
+- **Two defects the new tests caught in the new rule, both found by mutation.** (1) A
+  `git([...])` call in each remote helper was missing its `cwd`, so both raised `TypeError` —
+  invisible, because `evaluate()` wraps every check in `try/except` and turns a crash into
+  "did not fire". A totality test at *that* seam cannot see a crash; it must call the check
+  directly, which is what caught it once rewritten. (2) `git branch -D <nonexistent>` fired,
+  because an unresolvable revision is indistinguishable from an unrecoverable one; a branch that
+  does not exist locally is now no verdict.
+- **The remote's HEAD is queried (`git ls-remote --symref`), not read from
+  `refs/remotes/origin/HEAD`.** That ref is written by `git clone` and `git remote set-head`, and is
+  absent in a `git init` + `git remote add` repo — reading it made the rule treat the remote's own
+  answer as the local repo's convention, which silently disabled the default-branch protection.
+- Tests: 176 pass. The mutation matrix — each safeguard removed or degraded in turn — is what
+  found the two defects above, and then found two more in itself:
+  - a **dead branch**: the local "merged into the default branch" escape. If a branch's tip is an
+    ancestor of the default branch, the default branch *is* a holder, so `_holders` already covers
+    it. Deleting it left the suite green, which is how it was found; removed.
+  - a **test passing for the wrong reason**: `push --delete <merged>` was never given a remote
+    branch to delete, so `ls-remote` found nothing and the remote path never ran. It passes now,
+    and deleting the escape it covers turns it red.
+  The remaining seven safeguards are each pinned by a named test, so the suite is green because
+  the guards work, not because nothing was exercised.
+
 ## [0.4.1] - 2026-10-26
 
 - `git/worktree-remove-ignored` promoted from **warn to block**. It detected the doomed worktree
