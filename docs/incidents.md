@@ -133,3 +133,21 @@ present. The failure was first misattributed to a grep-rewriting hook; only isol
 invocation exposed the cause. The rule requires the `2>/dev/null` in the same command (the trap is the SILENT
 empty result, not the expansion itself), exempts `for`-loop variables, `${=var}` and array forms, and the fix
 reminds that every negative search needs a planted positive control (observation 0046).
+
+## git/discards-uncommitted
+
+`git checkout -- <path>` restores the worktree file from the index, never refuses, and exits 0. During the
+echoprism live-test batch, a session ran
+
+    git checkout -- src-tauri/src/db/queries.rs 2>/dev/null
+
+to revert a deliberately mutated test file — and discarded the *uncommitted* backfill work that lived in the
+same file (a test plus two code blocks). The loss surfaced only when the session had to redo the work; the
+`2>/dev/null` had hidden the only output that could have hinted at it. A branch switch behaves differently —
+git either carries the changes or refuses — which is why a plain `git checkout <branch>` gets no verdict and
+only the forced forms (`checkout -f`, `switch --discard-changes`) fire. The same rule covers the other two
+commands that destroy the same class of work in place: `git reset --hard` (staged and unstaged tracked
+edits) and `git clean -f` (untracked files; `-x` adds ignored ones). The rule reads the real repo state at
+the command's own cwd (following `cd X` and `git -C X`), so a clean path, an untracked pathspec (git errors
+on those rather than losing them), an index-only `restore --staged` (the worktree copy keeps the work), a
+same-command `git stash -u`, quoted or variable pathspecs, and cache-only noise all stay silent.

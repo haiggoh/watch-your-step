@@ -40,6 +40,7 @@ is command substitution: the code span is replaced by the output of running it, 
 | `secrets/ps-argv` | warn | `ps aux`/`ax` / `-ef` or `-e -f` / `-ww` / `-o args`/`command`/`cmd`, `pgrep -a` / `-fl` / `--list-full`: full process arguments can carry API keys into the transcript |
 | `git/stash-untracked` | warn | a bare `git stash` (no `-u` / `-a`) with untracked files present: they are not stashed, and a later clean or checkout can destroy them |
 | `zsh/unquoted-var-arglist` | warn (zsh) | `cmd $files 2>/dev/null`: zsh passes the whole list as ONE argument, and the failure reads as a clean empty result |
+| `git/discards-uncommitted` | block | `git checkout`/`git restore` on paths carrying uncommitted edits (the `<rev> --` form counts staged-only too), a forced switch (`checkout -f`, `switch --discard-changes`), `git reset --hard` with tracked edits, or `git clean -f` with untracked files — when uncommitted work would actually be lost |
 
 The `git/` rules and `zsh/unmatched-glob` are **state-aware**: instead of matching text, they look at the
 repository or the filesystem at hook time (the staged diff, the worktree's ignored files, the checkout's dirty

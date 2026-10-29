@@ -1,3 +1,24 @@
+## [0.5.0] - 2026-10-29
+
+- **New rule `git/discards-uncommitted` (block).** `git checkout -- <path>` restores the worktree from the
+  index and never refuses — unlike a branch switch, which carries the changes or errors out. A session lost
+  uncommitted work to exactly this form (2026-10-28, echoprism: a checkout meant to revert a test mutation
+  also discarded the uncommitted backfill in the same file, with `2>/dev/null` hiding the only tell). The
+  rule fires when the invocation would actually discard: the pathspec form of checkout/restore when the
+  paths carry uncommitted edits (the `<rev> --` form also counts staged-only edits, because the worktree is
+  rewritten from the rev), a forced branch switch (`checkout -f`, `switch --discard-changes`) on any dirty
+  tree, `git reset --hard` with tracked edits, and `git clean -f` with untracked files (`-x` adds ignored
+  ones). It stays silent where nothing is lost: a clean or untracked-only pathspec (git errors rather than
+  loses), `restore --staged` (the worktree copy keeps the work), a plain branch switch, a same-command
+  `git stash -u`, quoted or variable pathspecs (no verdict — they may hold the trap), and cache-only noise.
+- **The mutation matrix found one test gap**: dropping the untracked-row guard stayed green because the
+  from-the-index branch already excludes untracked rows via the column test — the guard is load-bearing
+  only for the rev form, and that case is now pinned directly. Two real defects were caught by the flag
+  tests on the way to green: a "0 paths" detail string is truthy (a cache-only tree fired on
+  `checkout -f main`), and `git restore` without `--` never collected its paths. The plugin.json
+  description also names `git/branch-delete-unrecoverable` now, which 0.4.2 omitted from it.
+- Tests: 193 pass (17 new, plus the two assertions the matrix forced).
+
 ## [0.4.2] - 2026-10-28
 
 - **New rule `git/branch-delete-unrecoverable` (block).** `git branch -D` overrides git's own
