@@ -577,6 +577,29 @@ def test_clean_force_blocks_untracked(repo):
     assert fired("git clean -fd", repo, DISCARD_RULE)
 
 
+def test_clean_x_counts_ignored_files(repo):
+    """`-x` extends clean to IGNORED files, and the docs claim it — so the positive direction needs
+    its own pin; the cache-noise test only exercises the negative one."""
+    (repo / ".gitignore").write_text("*.log\n")
+    sh(repo, "add", ".gitignore")
+    sh(repo, "commit", "-q", "-m", "ignore logs")
+    (repo / "ignored.log").write_text("the only copy\n")
+    assert not fired("git clean -fd", repo, DISCARD_RULE)    # -d alone leaves ignored files alone
+    assert fired("git clean -fdx", repo, DISCARD_RULE)       # -x deletes them for good
+
+
+def test_newline_separated_lines_do_not_pollute_the_pathspecs(repo):
+    """A newline separates commands like `;` does. Unless the arg capture stops at it, the NEXT
+    line's words become pathspecs of the first command — and a dirty filename merely MENTIONED on a
+    later line turns a clean restore into a false block (found in cross-family review)."""
+    (repo / "keep.txt").write_text("clean\n")
+    sh(repo, "add", "keep.txt")
+    sh(repo, "commit", "-q", "-m", "keep")
+    (repo / "ok.txt").write_text("changed\n")                # dirty, but only mentioned on line 2
+    assert not fired("git checkout -- keep.txt\necho ok.txt", repo, DISCARD_RULE)
+    assert fired("git checkout -- ok.txt\necho done", repo, DISCARD_RULE)   # the control: still fires
+
+
 def test_stash_u_escape_in_same_command_passes(repo):
     (repo / "new.txt").write_text("untracked\n")
     (repo / "ok.txt").write_text("changed\n")

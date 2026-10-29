@@ -631,7 +631,7 @@ def check_stash_untracked(texts, bare_view, cwd=None, **_):
 # `clean -f` destroy the same class of work; one rule, because the same-command escape
 # (`git stash -u`) and the repo-state read are shared.
 
-DISCARD_CMD = re.compile(r"\bgit(?:\s+-C\s+(\S+))?\s+(checkout|switch|restore|reset|clean)\b([^;&|]*)")
+DISCARD_CMD = re.compile(r"\bgit(?:\s+-C\s+(\S+))?\s+(checkout|switch|restore|reset|clean)\b([^;&|\n]*)")
 REDIRECT_TOK = re.compile(r"^\d*[<>]{1,2}|^&?[<>]{1,2}")   # 2>/dev/null, >f, >>f, 2>&1: not pathspecs
 STASH_U_BEFORE = re.compile(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|]*(?:-u|--include-untracked|-a|--all)\b")
 
@@ -677,7 +677,8 @@ def check_discards_uncommitted(texts, bare_view, cwd=None, **_):
         d = resolve_dir(bare_view[: m.start()], m.group(1), cwd)
         if not d:
             continue
-        # a `git stash -u` earlier in the SAME command empties the tree first (worktree_add_dirty's escape)
+        # a `git stash -u` earlier in the SAME command segment empties the tree first
+        # (worktree_add_dirty's escape; its `[^;&|]*` also spans a newline — see the follow-up note)
         if STASH_U_BEFORE.search(bare_view[: m.start()]):
             continue
         sub = m.group(2)
@@ -741,7 +742,9 @@ def check_discards_uncommitted(texts, bare_view, cwd=None, **_):
                     elif t in ("--source", "-s"):
                         source = True
                         skip = True
-                    # other flags (--ours, --theirs, ...) change nothing here
+                    # other flags (--ours, --theirs, --merge) are deliberately not judged: they
+                    # resolve a conflict rather than silently discard, and the spec is silent on
+                    # them, so the conservative no-verdict default applies (cross-family review)
                 else:
                     paths.append(t)
             if staged and not worktree:
