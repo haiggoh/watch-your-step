@@ -1,4 +1,4 @@
-# 🥾 watch-your-step
+# 🛘🥾 watch-your-step
 
 **Catches command traps before a tool call runs.** Some shell mistakes don't fail. The command exits 0 and the damage
 is silent: a code span inside double quotes runs as a command and its text disappears, a `$40` becomes an
