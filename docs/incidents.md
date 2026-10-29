@@ -169,6 +169,30 @@ and the targeted tests stayed green; only Pyright and the full suite caught it. 
 signature: an indentation-led anchor preceded by whitespace-only characters on its line. A substring replaced
 inside a line of code, an anchor at line start, and an anchor that starts with a newline all pass.
 
+## claude/headless-loads-mcp
+
+A bare headless `claude -p` loads every configured MCP server before its first token. Measured 2026-10-25
+while building the daily-skill-review launchd runner: a one-word reply took 5:26 wall-clock at 3% CPU, almost
+all of it MCP startup, and each server is a hang risk for an unattended run. The fix is two flags
+(`--strict-mcp-config --mcp-config '{"mcpServers":{}}'`); a run that writes also needs
+`--permission-mode bypassPermissions`, because `-p` cannot answer a permission prompt and grinds silently.
+The rule is a warning because some headless jobs do need MCP tools (`# wys:allow claude/headless-loads-mcp`).
+
+## git/add-all
+
+`git add -A`, `--all` and `.` stage the whole tree, including the user's unsaved work and files the agent never
+touched, so one commit swallows unreviewed changes (memory `backup-before-editing-uncommitted-work`). A replay
+over 6,136 real Bash commands from 4 days of transcripts fired it 7 times, all inside throwaway `mktemp`
+repos that test probes create. That is why it warns and does not block, and why `# wys:allow git/add-all`
+is the documented answer for a scratch repo.
+
+## shell/awk-nr1-batched-find
+
+In `find … -exec awk '…' {} +` one awk process reads many files in sequence, so `NR` keeps counting across
+files and `NR==1` is true for the first file only. A header parse built on it examined one file while the
+command exited 0 and the output looked plausible (task-observer session-start scan). `FNR==1` is per file.
+`-exec … \;` runs one awk per file, so `NR==1` is correct there and passes.
+
 ## The git guard (hook.wys-branch-guard, hook.wys-push-guard)
 
 `git/branch-delete-unrecoverable` judges the command line an agent types, and a re-measurement on 0.5.0

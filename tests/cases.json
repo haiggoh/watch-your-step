@@ -122,6 +122,30 @@
     {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -r x ${arr[@]} 2>/dev/null"},
     {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "echo cat $files 2>/dev/null"},
     {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat $roots 2>err.log"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "dirs=\"src tests\"; grep -rliE pat $dirs 2>/dev/null"}
+    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "dirs=\"src tests\"; grep -rliE pat $dirs 2>/dev/null"},
+
+    {"rule": "claude/headless-loads-mcp", "expect": "flag", "tool": "Bash", "command": "claude -p \"summarise the diff\" --model haiku"},
+    {"rule": "claude/headless-loads-mcp", "expect": "flag", "tool": "Bash", "command": "cd /tmp/x && claude --model haiku -p 'ping' --max-turns 1"},
+    {"rule": "claude/headless-loads-mcp", "expect": "flag", "tool": "Bash", "command": "env FOO=1 claude --print hello > out.txt"},
+    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude -p 'ping' --strict-mcp-config --mcp-config '{\"mcpServers\":{}}'"},
+    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude --strict-mcp-config --mcp-config x.json -p 'ping'"},
+    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude --resume abc123"},
+    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "echo \"run claude -p later\" && grep -rn 'claude -p' ~/.claude/scripts"},
+    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude -p 'needs the mcp tools' # wys:allow claude/headless-loads-mcp"},
+
+    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git add -A"},
+    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git add --all && git commit -m 'wip'"},
+    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git add ."},
+    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git -C ../sibling-repo add -A"},
+    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git add src/a.py tests/b.py"},
+    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git add -p"},
+    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git add ./src/a.py ./docs"},
+    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git commit -m \"never git add -A here\""},
+
+    {"rule": "shell/awk-nr1-batched-find", "expect": "flag", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'NR==1 {print FILENAME}' {} +"},
+    {"rule": "shell/awk-nr1-batched-find", "expect": "flag", "tool": "Bash", "command": "find d -type f -exec awk 'NR == 1 && /^---/ {fm=1}' {} + | wc -l"},
+    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'FNR==1 {print FILENAME}' {} +"},
+    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'NR==1 {print}' {} \\;"},
+    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "awk 'NR==1' file.txt"}
   ]
 }

@@ -44,6 +44,9 @@ is command substitution: the code span is replaced by the output of running it, 
 | `git/branch-delete-unrecoverable` | block | `git branch -d/-D` (every name, quoted or not, through `-C`/`-c` options) or `git push <remote> --delete`/`:<name>` when the branch's commits would be reachable from no other ref, and deleting `main`/`master` |
 | `tool/read-pages-non-pdf` | block | a `Read` with `pages` on a file that is not a PDF: `pages` is ignored there and the call silently returns line 1 again |
 | `tool/edit-anchor-mid-indent` | block | an `Edit`/`MultiEdit` whose `old_string` starts with indentation but matches inside a deeper-indented line, which silently re-nests the block |
+| `claude/headless-loads-mcp` | warn | a headless `claude -p`/`--print` without `--strict-mcp-config`: it loads every configured MCP server first (about five minutes of startup, one hang risk per server) |
+| `git/add-all` | warn | `git add -A`, `--all` or `.`: stages the whole tree, including the user's unsaved work. Fires inside throwaway test repos too; `# wys:allow git/add-all` |
+| `shell/awk-nr1-batched-find` | warn | `find … -exec awk '… NR==1 …' {} +`: one awk reads many files, so `NR==1` is true for the first file only; use `FNR==1` |
 
 The `git/` rules and `zsh/unmatched-glob` are **state-aware**: instead of matching text, they look at the
 repository or the filesystem at hook time (the staged diff, the worktree's ignored files, the checkout's dirty

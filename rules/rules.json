@@ -312,6 +312,51 @@
       "message": "this Edit's old_string starts with indentation but matches INSIDE a deeper-indented line: the replacement keeps the line's extra leading whitespace, which silently changes block nesting while every targeted test can stay green.",
       "fix": "anchor on whole lines at their exact indentation — copy old_string from a fresh Read of the file, never from recall",
       "incident": "2026-10-28, waypoints repo-category session: an 8-space anchor matched mid-indent inside a 12-space line and moved a block out of its if; the targeted tests stayed green and only Pyright plus the full suite caught it."
+    },
+    {
+      "id": "claude/headless-loads-mcp",
+      "severity": "warn",
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "bare"
+      ],
+      "pattern": "(?m)(?:^|[;&|(]\\s*|\\benv\\s+(?:\\S+=\\S+\\s+)*)claude(?=\\s)(?![^;&|]*--strict-mcp-config)[^;&|]*?\\s(?:-p|--print)\\b",
+      "message": "a headless `claude -p` loads EVERY configured MCP server before its first token: about five minutes of startup and one hang risk per server, measured at 5:26 wall-clock for a one-word reply.",
+      "fix": "add --strict-mcp-config --mcp-config '{\"mcpServers\":{}}' when the job needs no MCP tools; a run that WRITES also needs --permission-mode bypassPermissions (a headless run cannot answer a permission prompt and grinds silently)",
+      "incident": "2026-10-25, the daily-skill-review launchd runner: a bare `claude -p` one-word probe took 5:26 at 3% CPU, nearly all of it MCP startup."
+    },
+    {
+      "id": "git/add-all",
+      "severity": "warn",
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "bare"
+      ],
+      "pattern": "\\bgit\\s+(?:-C\\s+\\S+\\s+)?add\\s+(?:(?:-[A-Za-z]*A[A-Za-z]*|--all)|\\.)(?=\\s|$|[;&|])",
+      "message": "git add -A / --all / . stages EVERYTHING in the tree, including the user's unsaved work and files you never touched, so one commit swallows changes nobody reviewed.",
+      "fix": "stage by path: git add <file> ... (derive the paths from git status --porcelain or git ls-files), then confirm with git diff --cached --stat before committing",
+      "incident": "recorded in memory backup-before-editing-uncommitted-work: `git add -A` clobbered uncommitted work that was not mine to commit."
+    },
+    {
+      "id": "shell/awk-nr1-batched-find",
+      "severity": "warn",
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "pattern": "find\\b.*?-exec\\s+awk\\b.*?\\bNR\\s*==\\s*1\\b.*?\\{\\}\\s*\\+",
+      "message": "in a batched `find -exec awk ... {} +` one awk process reads many files in sequence, so NR==1 is true only for the FIRST file; every later file is skipped and the count looks plausible.",
+      "fix": "use FNR==1 (per-file line number) instead of NR==1, and pair any zero-guard with an independently derived file count",
+      "incident": "recorded in the task-observer session-start scan: an NR==1 header parse inside a batched find -exec awk examined only the first file while the command exited 0."
     }
   ]
 }

@@ -1,3 +1,16 @@
+## [0.7.0] - 2026-10-29
+
+- **Three new warning rules, migrated out of always-on memory** (the lesson stays in `docs/incidents.md`, the
+  barrier is the hook): `claude/headless-loads-mcp` (a headless `claude -p` without `--strict-mcp-config`
+  loads every MCP server, ~5 min startup), `git/add-all` (`git add -A`/`--all`/`.` stages the user's unsaved
+  work), `shell/awk-nr1-batched-find` (`NR==1` in a batched `find -exec awk … {} +` sees only the first file).
+- Each rule has should-flag and should-pass cases and was mutation-checked (disabling its pattern turns 4, 5 and
+  3 cases red). A replay over 6,136 real Bash commands: 0 hits for the first and third, 7 for `git/add-all`, all
+  in throwaway `mktemp` repos, so it is a warning with a documented `# wys:allow git/add-all`.
+- Not migrated: a `python3 <script>` whose shebang names another interpreter needs a file read, which the
+  pattern engine has no check for yet.
+- Tests: 306 pass.
+
 ## [0.6.0] - 2026-10-29
 
 - **New: a git-level branch guard.** A PreToolUse hook only sees the command an agent types, and a branch
