@@ -295,6 +295,23 @@
       "message": "Read's `pages` parameter applies only to PDFs: on a text file it is silently ignored and the call returns the file from line 1 again, with no error — a re-read that looks like a fresh one.",
       "fix": "page a text file with  offset=<1-based start line>  limit=<number of lines>",
       "incident": "2026-10-25, echoprism Phase 5: a .tsx was read with pages 1/2/3 six times in one turn, each returning lines 1-55 again while reporting success; a memory describing the trap was loaded throughout."
+    },
+    {
+      "id": "tool/edit-anchor-mid-indent",
+      "severity": "block",
+      "stateful": true,
+      "tools": [
+        "Edit",
+        "MultiEdit"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "check": "edit_anchor_mid_indent",
+      "message": "this Edit's old_string starts with indentation but matches INSIDE a deeper-indented line: the replacement keeps the line's extra leading whitespace, which silently changes block nesting while every targeted test can stay green.",
+      "fix": "anchor on whole lines at their exact indentation — copy old_string from a fresh Read of the file, never from recall",
+      "incident": "2026-10-28, waypoints repo-category session: an 8-space anchor matched mid-indent inside a 12-space line and moved a block out of its if; the targeted tests stayed green and only Pyright plus the full suite caught it."
     }
   ]
 }

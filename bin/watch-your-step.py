@@ -908,9 +908,37 @@ def check_read_pages_non_pdf(texts, tool_input=None, **_):
     return "pages" in ti and not str(ti.get("file_path", "")).lower().endswith(".pdf")
 
 
+def _mid_indent(text, anchor):
+    """True when `anchor` (starting with a space or tab) occurs after whitespace-only characters
+    on its line — the 8-space anchor inside a 12-space line."""
+    if not anchor or anchor[0] not in " \t":
+        return False
+    i = text.find(anchor)
+    while i >= 0:
+        line_start = text.rfind("\n", 0, i) + 1
+        lead = text[line_start:i]
+        if lead and not lead.strip(" \t"):
+            return True
+        i = text.find(anchor, i + 1)
+    return False
+
+
+def check_edit_anchor_mid_indent(texts, tool_input=None, **_):
+    ti = tool_input or {}
+    try:
+        with open(str(ti.get("file_path", "")), encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return False                      # no such file (Edit creates nothing): no verdict
+    multi = ti.get("edits")
+    edits = multi if isinstance(multi, list) else [ti]
+    return any(_mid_indent(text, str(e.get("old_string") or "")) for e in edits if isinstance(e, dict))
+
+
 CHECKS = {
     "home_typo": check_home_typo,
     "read_pages_non_pdf": check_read_pages_non_pdf,
+    "edit_anchor_mid_indent": check_edit_anchor_mid_indent,
     "truncate_before_read": check_truncate_before_read,
     "equals_word": check_equals_word,
     "staged_conflict_markers": check_staged_conflict_markers,
