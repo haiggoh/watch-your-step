@@ -422,3 +422,17 @@ def test_status_says_when_git_cannot_host_the_guard(own_global, tmp_path, monkey
     monkeypatch.setenv("PATH", f"{fake}:{os.environ['PATH']}")
     code, out = wys.git_guard("status", SCRIPT)
     assert code == 0 and "no config-based hooks" in out
+
+
+def test_ensure_installs_when_the_session_starts_outside_a_repo(own_global, tmp_path, monkeypatch):
+    """Found in final-review probing: outside a repository `git hook list` sees NO config hooks
+    (exit 1, even for one passed with -c), so the feature probe read as 'unsupported' and a session
+    started in ~ — this very session — silently never got the guard."""
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    monkeypatch.chdir(plain)
+    code, out = wys.git_guard("ensure", SCRIPT)
+    assert "installed" in out
+    assert gcfg("hook.wys-branch-guard.event") == "reference-transaction"
+    status = wys.git_guard("status", SCRIPT)[1]
+    assert "global\twys-branch-guard" in status and "no config-based hooks" not in status

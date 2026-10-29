@@ -1136,12 +1136,21 @@ def _set_global(key, value):
     raise RuntimeError((p.stderr.strip() if p else "") or f"git config {key} failed")
 
 
-def _config_hooks_supported():
+def _hook_list(event, *cfg):
+    """`git hook list --show-scope <event>` as git itself sees it — run inside a throwaway repo,
+    because OUTSIDE a repository git lists no config hooks at all (exit 1, even one passed with -c;
+    measured). A session started in ~ would otherwise read every git as unsupported."""
     import subprocess
-    p = subprocess.run(["git", "-c", "hook.wysprobe.event=reference-transaction", "-c",
-                        "hook.wysprobe.command=true", "hook", "list", "reference-transaction"],
-                       capture_output=True, text=True, timeout=5)
-    return "wysprobe" in p.stdout
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="wys-hooklist-") as d:
+        subprocess.run(["git", "init", "-q", d], capture_output=True, timeout=5)
+        args = ["git", *[x for c in cfg for x in ("-c", c)], "hook", "list", "--show-scope", event]
+        return subprocess.run(args, cwd=d, capture_output=True, text=True, timeout=5).stdout
+
+
+def _config_hooks_supported():
+    return "wysprobe" in _hook_list("reference-transaction", "hook.wysprobe.event=reference-transaction",
+                                    "hook.wysprobe.command=true")
 
 
 def git_guard(action, script=None):
@@ -1151,11 +1160,9 @@ def git_guard(action, script=None):
     script = os.path.realpath(script or __file__)
     names = {kind: f"hook.{GUARD_NAMES[kind]}" for kind in GUARD_NAMES}
     if action == "status":
-        import subprocess
         lines = []
         for kind, event in GUARD_EVENTS.items():
-            p = subprocess.run(["git", "hook", "list", "--show-scope", event], capture_output=True, text=True)
-            lines.append(f"{event}: " + (p.stdout.strip().replace("\n", "; ") or "(no hooks)"))
+            lines.append(f"{event}: " + (_hook_list(event).strip().replace("\n", "; ") or "(no hooks)"))
             lines.append(f"  {names[kind]}.enabled = {_gcfg(names[kind] + '.enabled') or 'unset (on)'}")
         lines.append(f"  script: {script} ({'present' if os.path.isfile(script) else 'MISSING'})")
         if not _config_hooks_supported():
