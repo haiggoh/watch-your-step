@@ -602,7 +602,7 @@ def check_worktree_add_dirty(texts, bare_view, cwd=None, **_):
             continue
         real = dirty_paths(d) or []
         # a preceding `git stash -u` in the SAME command empties the source checkout first
-        if real and not re.search(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|]*(?:-u|--include-untracked|-a|--all)\b",
+        if real and not re.search(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|\n]*(?:-u|--include-untracked|-a|--all)\b",
                                   bare_view[: m.start()]):
             n = len(real)
             return (f"{n} uncommitted path{'s' if n != 1 else ''} "
@@ -694,7 +694,7 @@ def check_stash_untracked(texts, bare_view, cwd=None, **_):
 
 DISCARD_CMD = re.compile(r"\bgit(?:\s+-C\s+(\S+))?\s+(checkout|switch|restore|reset|clean)\b([^;&|\n]*)")
 REDIRECT_TOK = re.compile(r"^\d*[<>]{1,2}|^&?[<>]{1,2}")   # 2>/dev/null, >f, >>f, 2>&1: not pathspecs
-STASH_U_BEFORE = re.compile(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|]*(?:-u|--include-untracked|-a|--all)\b")
+STASH_U_BEFORE = re.compile(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|\n]*(?:-u|--include-untracked|-a|--all)\b")
 
 
 def _discard_detail(n):
@@ -738,8 +738,8 @@ def check_discards_uncommitted(texts, bare_view, cwd=None, **_):
         d = resolve_dir(bare_view[: m.start()], m.group(1), cwd)
         if not d:
             continue
-        # a `git stash -u` earlier in the SAME command segment empties the tree first
-        # (worktree_add_dirty's escape; its `[^;&|]*` also spans a newline — see the follow-up note)
+        # a `git stash -u` earlier in the SAME command segment empties the tree first (the same
+        # escape as worktree_add_dirty's; both stop at a newline since 0.6.0)
         if STASH_U_BEFORE.search(bare_view[: m.start()]):
             continue
         sub = m.group(2)

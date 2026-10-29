@@ -328,6 +328,13 @@ def test_worktree_add_after_stash_untracked_in_same_command_passes(repo):
     assert not fired("git stash -u && git worktree add ../wt -b f", repo, "git/worktree-add-dirty")
 
 
+def test_worktree_add_stash_escape_stops_at_a_newline(repo):
+    """A newline ends a command like ';' does: a plain `git stash` whose LATER line merely mentions
+    -u must not count as `git stash -u` (the same scope bug 0.5.0 fixed in discards-uncommitted)."""
+    (repo / "new.txt").write_text("untracked\n")
+    assert fired("git stash\necho -u\ngit worktree add ../wt -b f", repo, "git/worktree-add-dirty")
+
+
 def test_real_cache_dir_stays_silent_but_cache_like_name_warns(repo):
     (repo / "venv").mkdir()
     (repo / "venv" / "x.py").write_text("cache\n")
@@ -678,6 +685,11 @@ def test_stash_u_escape_in_same_command_passes(repo):
     (repo / "new.txt").write_text("untracked\n")
     (repo / "ok.txt").write_text("changed\n")
     assert not fired("git stash -u && git checkout -- ok.txt", repo, DISCARD_RULE)
+
+
+def test_discards_stash_escape_stops_at_a_newline(repo):
+    (repo / "ok.txt").write_text("changed\n")
+    assert fired("git stash\necho -u\ngit checkout -- ok.txt", repo, DISCARD_RULE)
 
 
 def test_untracked_only_path_restore_passes(repo):
