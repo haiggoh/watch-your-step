@@ -10,6 +10,8 @@
     {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "d=`date +%F`; echo \"$d\""},
     {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "git commit -m \"fix: a $(echo ok) thing\" # wys:allow shell/backtick-in-dquote `x`"},
     {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "echo \"use `rtk` here\" # wys:allow shell/backtick-in-dquote"},
+    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit --allow-empty -m \"see # wys:allow shell/backtick-in-dquote\" && echo \"use `rtk` here\""},
+    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "cat > n.md <<EOF\n# wys:allow shell/backtick-in-dquote\nuse `rtk` here\nEOF"},
     {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "git commit -m \"$(cat <<'EOF'\nfix: the `foo` helper costs $40 (see `bar`)\nEOF\n)\""},
     {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "gh pr create --title \"t\" --body \"$(cat <<'EOF'\n## The bug\n| a | `b` |\nEOF\n)\" && echo done"},
     {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit -m \"$(cat <<EOF\nfix: the `foo` helper\nEOF\n)\""},

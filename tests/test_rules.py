@@ -136,6 +136,41 @@ def test_a_check_may_return_a_detail_string(monkeypatch):
     assert "base message. 3 files stay behind" in wys.render(hits)
 
 
+def test_test_mode_surfaces_a_raising_check(monkeypatch, capsys):
+    """Hook mode fails open, but `test` is the probe people trust: a check that RAISES must not read
+    as 'clean' there (cross-family review D1, confirmed 2026-10-29: it printed clean)."""
+    def boom(*a, **k):
+        raise RuntimeError("planted")
+    monkeypatch.setitem(wys.CHECKS, "truncate_before_read", boom)
+    rc = wys.main(["test", "sort f > f"])
+    err = capsys.readouterr().err
+    assert rc != 0
+    assert "planted" in err and "shell/truncate-before-read" in err
+
+
+def test_hook_mode_still_fails_open_on_a_raising_check(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("planted")
+    monkeypatch.setitem(wys.CHECKS, "truncate_before_read", boom)
+    assert wys.evaluate("Bash", {"command": "sort f > f"}, shell="zsh", user=USER, rules=RULES) == []
+
+
+def test_split_command_literal_view_keeps_simple_quoted_words():
+    view, parts = wys.split_command("git branch -D \"feat/x\" 'y' \"a b\" \"$v\" # wys:allow r/x")
+    assert parts["lit"] == ["git branch -D feat/x y Q Q "]
+    assert parts["comment"] == ["# wys:allow r/x"]
+    assert "feat/x" not in view          # the bare view is unchanged: quoted spans stay Q
+
+
+def test_non_bash_checks_receive_the_whole_tool_input(monkeypatch):
+    seen = {}
+    monkeypatch.setitem(wys.CHECKS, "detail_probe", lambda texts, **k: seen.update(k) or False)
+    rule = {"id": "t/probe", "severity": "warn", "tools": ["Read"], "shells": [],
+            "context": ["raw"], "check": "detail_probe", "message": "m", "fix": "f", "incident": "i"}
+    wys.evaluate("Read", {"file_path": "/x/a.tsx", "pages": "2"}, shell="zsh", user=USER, rules=[rule])
+    assert seen.get("tool_input") == {"file_path": "/x/a.tsx", "pages": "2"}
+
+
 def test_an_empty_detail_string_is_no_hit(monkeypatch):
     monkeypatch.setitem(wys.CHECKS, "detail_probe", lambda texts, **k: "")
     rule = {"id": "t/detail", "severity": "warn", "tools": ["Bash"], "shells": [],

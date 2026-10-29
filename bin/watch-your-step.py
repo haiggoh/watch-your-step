@@ -30,7 +30,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_RULES = os.path.join(ROOT, "rules", "rules.json")
 MARK = "\U0001F97E watch-your-step"
-CONTEXTS = ("bare", "squote", "dquote", "heredoc_quoted", "heredoc_unquoted", "raw")
+CONTEXTS = ("bare", "squote", "dquote", "heredoc_quoted", "heredoc_unquoted", "raw", "lit", "comment")
+LITERAL_WORD = re.compile(r"[\w./@:+=-]+")  # a quoted span this simple means exactly its text
 PATH_KEYS = ("file_path", "notebook_path")
 
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][\w.-]*)\2")
@@ -102,9 +103,13 @@ def split_command(cmd):
     Returns (bare_view, parts): bare_view is the command with every quoted span replaced by Q and
     heredoc bodies and comments removed; parts maps each quoted context to its texts. Escaped
     characters are dropped from double-quoted text, since they are literal there.
+
+    parts["lit"] is the same view except that a quoted span made only of LITERAL_WORD characters
+    keeps its text ("feat/x" -> feat/x): it can name a branch, a variable or a space cannot.
+    parts["comment"] holds the real comments, the only place a `# wys:allow` marker counts.
     """
     parts = {k: [] for k in CONTEXTS}
-    bare = []
+    bare, lit = [], []
     pending = []  # heredocs opened on the current line: (delimiter, quoted, strip_tabs)
     i, n = 0, len(cmd)
     at_word_start = True
@@ -112,6 +117,7 @@ def split_command(cmd):
         c = cmd[i]
         if c == "\\" and i + 1 < n:
             bare.append("_")
+            lit.append("_")
             i += 2
             at_word_start = False
             continue
@@ -122,15 +128,17 @@ def split_command(cmd):
                 j += 2 if (c == "$" and cmd[j] == "\\") else 1
             parts["squote"].append(cmd[start:j])
             bare.append("Q")
+            lit.append(cmd[start:j] if c == "'" and LITERAL_WORD.fullmatch(cmd[start:j]) else "Q")
             i = j + 1
             at_word_start = False
             continue
         if c == '"':
-            j, buf = i + 1, []
+            j, buf, plain = i + 1, [], True
             while j < n:
                 d = cmd[j]
                 if d == "\\" and j + 1 < n:
                     j += 2  # an escaped character is literal: never seen by a rule
+                    plain = False
                     continue
                 if cmd.startswith("$(", j):
                     # a subshell is its own command line: parse it on its own terms, so a quoted
@@ -141,6 +149,7 @@ def split_command(cmd):
                         if k != "raw":
                             parts[k].extend(sub[k])
                     buf.append("S")
+                    plain = False
                     j = end + 1
                     continue
                 if d == '"':
@@ -149,11 +158,14 @@ def split_command(cmd):
                 j += 1
             parts["dquote"].append("".join(buf))
             bare.append("Q")
+            text = "".join(buf)
+            lit.append(text if plain and LITERAL_WORD.fullmatch(text) else "Q")
             i = j + 1
             at_word_start = False
             continue
         if c == "#" and at_word_start:
             j = cmd.find("\n", i)
+            parts["comment"].append(cmd[i:] if j < 0 else cmd[i:j])
             i = n if j < 0 else j
             continue
         if c == "<" and cmd.startswith("<<", i) and not cmd.startswith("<<<", i):
@@ -161,11 +173,13 @@ def split_command(cmd):
             if m:
                 pending.append((m.group(3), bool(m.group(2)), m.group(1) == "-"))
                 bare.append("<<H")
+                lit.append("<<H")
                 i = m.end()
                 at_word_start = False
                 continue
         if c == "\n" and pending:
             bare.append("\n")
+            lit.append("\n")
             i += 1
             for delim, quoted, strip in pending:
                 body = []
@@ -192,10 +206,12 @@ def split_command(cmd):
             i += 2
             continue
         bare.append(c)
+        lit.append(c)
         at_word_start = c in " \t\n;&|()"
         i += 1
     view = "".join(bare)
     parts["bare"].append(view)
+    parts["lit"].append("".join(lit))   # last entry = this command line (subshells come first)
     parts["raw"].append(cmd)
     return view, parts
 
@@ -861,8 +877,11 @@ def load_rules(path=None):
         return json.load(f)["rules"]
 
 
-def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None):
-    """Return the rules a tool call trips, in rules-file order."""
+def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None, strict=False):
+    """Return the rules a tool call trips, in rules-file order.
+
+    strict=True (the `test` probe) re-raises a check that crashes or names no CHECKS entry instead
+    of reading it as 'did not fire': hook mode fails open, a probe that does so lies."""
     rules = load_rules() if rules is None else rules
     shell = shell or os.environ.get("WATCH_YOUR_STEP_SHELL") or os.path.basename(os.environ.get("SHELL", "sh"))
     user = user or os.environ.get("WATCH_YOUR_STEP_USER") or getpass.getuser()
@@ -872,12 +891,16 @@ def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None):
     if tool == "Bash":
         cmd = tool_input.get("command") or ""
         view, parts = split_command(cmd)
-        allowed = {a for m in ALLOW.finditer(cmd) for a in re.split(r"[,\s]+", m.group(1)) if a}
+        # only a REAL comment carries the marker — never a commit message or a heredoc body
+        allowed = {a for c in parts["comment"] for m in ALLOW.finditer(c)
+                   for a in re.split(r"[,\s]+", m.group(1)) if a}
+        lit_view = parts["lit"][-1]
     else:
         path = next((tool_input[k] for k in PATH_KEYS if tool_input.get(k)), "")
         view, parts = path, {k: [] for k in CONTEXTS}
         parts["raw"].append(path)
         allowed = set()
+        lit_view = path
     hits = []
     for rule in rules:
         rid = rule["id"]
@@ -888,8 +911,12 @@ def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None):
         texts = [t for ctx in rule["context"] for t in parts[ctx]]
         if "check" in rule:
             try:
-                fired = CHECKS[rule["check"]](texts, bare_view=view, user=user, cwd=cwd)
-            except Exception:  # a check that cannot decide (git missing, timeout) never blocks
+                fired = CHECKS[rule["check"]](texts, bare_view=view, lit_view=lit_view, user=user,
+                                              cwd=cwd, tool_input=tool_input)
+            except Exception as e:  # a check that cannot decide (git missing, timeout) never blocks
+                if strict:
+                    raise RuntimeError(f"rule {rid}: check {rule['check']!r} raised "
+                                       f"{type(e).__name__}: {e}") from e
                 fired = False
         else:
             fired = any(re.search(rule["pattern"], t) for t in texts)
@@ -952,7 +979,11 @@ def cmd_test(args):
         return 2
     text = " ".join(args)
     tool_input = {"command": text} if tool == "Bash" else {"file_path": text}
-    hits = evaluate(tool, tool_input, shell=shell)
+    try:
+        hits = evaluate(tool, tool_input, shell=shell, strict=True)
+    except RuntimeError as e:
+        sys.stderr.write(f"{MARK}: ✖ check error — the probe cannot vouch for this command: {e}\n")
+        return 1
     print(render(hits) if hits else f"{MARK}: clean")
     return 0
 
