@@ -415,7 +415,7 @@ def _deliberate(view, m, kind, cfg):
     return GUARD_OFF[kind] in cfg or bool(ALLOW_ENV.search(view[: m.start()]))
 
 
-def unrecoverable(d, tip, exclude, extra_holders=frozenset()):
+def unrecoverable(d, tip, exclude, extra_holders=()):
     """True when the commit `tip` would be reachable from no ref outside `exclude` — the one
     predicate the command-line rule and both git hooks share.
 
@@ -953,6 +953,101 @@ CHECKS = {
 }
 
 
+# ---- the git-level guard (0.6.0): git's own reference-transaction and pre-push hooks ---------
+# A PreToolUse hook judges the command an agent TYPES; every other route to a branch deletion
+# ($VAR, bash -c, update-ref -d, a script, a Python subprocess) is invisible to it. Git's ref
+# transaction is the choke point all of them pass. Installed by `git-guard`, run only under Claude.
+
+ZERO_OID = "0" * 40
+GUARD_NAMES = {"ref": "wys-branch-guard", "push": "wys-push-guard"}
+
+
+def _is_zero(oid):
+    return bool(oid) and not oid.strip("0")
+
+
+def _refusal(what, why, native, env):
+    return (f"{MARK}: ✖ refused {what} — {why}\n"
+            "  merge it or push it somewhere first; if you really mean it, either of:\n"
+            f"    {native}\n    {env}\n")
+
+
+def git_hook_ref(phase, lines, d):
+    """(exit code, message) for one reference-transaction call. Only `prepared` can refuse: the
+    refs are locked and the transaction can still be aborted there, never after it."""
+    if phase != "prepared":
+        return 0, ""
+    deletions, holders = [], set()
+    for ln in lines:
+        f = ln.split()
+        if len(f) < 3:
+            continue
+        old, new, ref = f[:3]
+        if _is_zero(new):
+            if ref.startswith("refs/heads/"):
+                deletions.append((old, ref))
+        else:
+            holders.add(new)             # a ref SET in this transaction holds what it points at
+    exclude = {ref for _, ref in deletions}
+    refused = []
+    for old, ref in deletions:
+        tip = None if _is_zero(old) else old   # `branch -D` passes zeros; resolve it ourselves
+        tip = tip or (git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], d) or "").strip()
+        if tip and unrecoverable(d, tip, exclude, holders):
+            refused.append(ref[len("refs/heads/"):])
+    if not refused:
+        return 0, ""
+    names = " ".join(refused)
+    return 1, _refusal(f"deleting branch {names}",
+                       "its commits are reachable from no other branch, tag or remote-tracking ref",
+                       f"git -c hook.{GUARD_NAMES['ref']}.enabled=false branch -D {names}",
+                       f"WYS_ALLOW_BRANCH_DELETE=1 git branch -D {names}")
+
+
+def git_hook_push(remote, lines, d):
+    """(exit code, message) for one pre-push call: refuse deleting a remote branch whose commits
+    exist nowhere here outside refs/remotes/<remote>/<branch> itself."""
+    for ln in lines:
+        f = ln.split()
+        if len(f) < 4:
+            continue
+        _, local_oid, remote_ref, remote_oid = f[:4]
+        if not _is_zero(local_oid) or not remote_ref.startswith("refs/heads/"):
+            continue
+        name = remote_ref[len("refs/heads/"):]
+        lost = (name in DEFAULT_NAMES
+                or unrecoverable(d, remote_oid, {f"refs/remotes/{remote}/{name}"}))
+        if lost:
+            why = ("it is a default branch every consumer resolves" if name in DEFAULT_NAMES
+                   else "its commits exist nowhere else in this repository")
+            return 1, _refusal(f"deleting {remote}/{name}", why,
+                               f"git -c hook.{GUARD_NAMES['push']}.enabled=false push {remote} --delete {name}",
+                               f"WYS_ALLOW_BRANCH_DELETE=1 git push {remote} --delete {name}")
+    return 0, ""
+
+
+def cmd_git_hook(args, stdin_text, cwd):
+    """`git-hook ref <phase>` / `git-hook push <remote> <url>`: what git's hooks run. Exits 0 on
+    anything but a positive verdict — an internal error must never block git."""
+    if not os.environ.get("CLAUDECODE") or os.environ.get("WYS_ALLOW_BRANCH_DELETE") == "1":
+        return 0
+    try:
+        lines = stdin_text.splitlines()
+        if args[:1] == ["ref"] and len(args) >= 2:
+            code, msg = git_hook_ref(args[1], lines, cwd)
+        elif args[:1] == ["push"] and len(args) >= 2:
+            code, msg = git_hook_push(args[1], lines, cwd)
+        else:
+            sys.stderr.write(f"{MARK}: git-hook: unknown hook {args!r}, allowed\n")
+            return 0
+    except Exception as e:
+        sys.stderr.write(f"{MARK}: git guard internal error, allowed ({type(e).__name__}: {e})\n")
+        return 0
+    if msg:
+        sys.stderr.write(msg)
+    return code
+
+
 def load_rules(path=None):
     with open(path or os.environ.get("WATCH_YOUR_STEP_RULES") or DEFAULT_RULES, encoding="utf-8") as f:
         return json.load(f)["rules"]
@@ -1087,6 +1182,8 @@ def main(argv):
         return cmd_test(rest)
     if cmd == "rules" and not rest:
         return cmd_rules()
+    if cmd == "git-hook":
+        return cmd_git_hook(rest, sys.stdin.read(), os.getcwd())
     sys.stderr.write(f"watch-your-step: unknown argument {cmd!r}\n")
     usage(sys.stderr)
     return 2
