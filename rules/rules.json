@@ -264,6 +264,22 @@
       "message": "this branch deletion would leave its commits reachable from no other ref: `git branch -D` overrides git's own unmerged-branch refusal, and `git push --delete` refuses only the branch the remote's HEAD points at \u2014 which stops applying the moment origin/HEAD points elsewhere.",
       "fix": "check first:  git branch -a --contains <branch>  and  git merge-base --is-ancestor <branch> origin/<default>  \u2014 if nothing else lists it, merge it or push it somewhere before deleting",
       "incident": "2026-10-27, porting run-to-completion's ship cleanup: a repo whose config names a default branch origin/HEAD does not point at (echoprism ships master) has no protection at all"
+    },
+    {
+      "id": "git/discards-uncommitted",
+      "severity": "block",
+      "stateful": true,
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "check": "discards_uncommitted",
+      "message": "this git command discards uncommitted changes instead of refusing: git checkout/git restore replace working-tree files from the index or a revision, git reset --hard drops staged and unstaged edits, and git clean -f deletes untracked files — each exits 0.",
+      "fix": "commit the work, or park it first (git stash -u, or a WIP branch — a branch is more visible); when discarding really is intended, end the command with  # wys:allow git/discards-uncommitted",
+      "incident": "2026-10-28, echoprism Task 10: a git checkout -- src-tauri/src/db/queries.rs 2>/dev/null meant to revert a test mutation also discarded the uncommitted backfill work in the same file; the loss surfaced only when the work had to be redone."
     }
   ]
 }

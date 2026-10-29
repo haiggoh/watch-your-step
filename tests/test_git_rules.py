@@ -13,7 +13,7 @@ wys = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wys)
 RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
 TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored", "git/worktree-add-dirty",
-          "git/stash-untracked", "git/branch-delete-unrecoverable"}
+          "git/stash-untracked", "git/branch-delete-unrecoverable", "git/discards-uncommitted"}
 TESTED_ELSEWHERE = {"zsh/unmatched-glob"}  # proven in tests/test_unmatched_glob.py
 MARKED = "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n"
 
@@ -495,3 +495,151 @@ def test_the_check_is_total_and_never_raises(origin_repo, tmp_path):
                 "echo hello", "git status"):
         for cwd in (origin_repo, not_a_repo):
             assert check(cmd, cwd) is False, f"{cmd!r} in {cwd.name} raised or fired"
+
+
+# --- git/discards-uncommitted: a git command that silently discards uncommitted work -----------
+# Measured 2026-10-28 (echoprism Task 10): `git checkout -- src-tauri/src/db/queries.rs 2>/dev/null`,
+# meant to revert a test mutation, also discarded the uncommitted backfill in the same file and
+# exited 0. The pathspec form of checkout/restore restores from the index or a revision and never
+# refuses — unlike a branch switch, which either carries the changes or errors out. `reset --hard`
+# and `clean -f` destroy the same class of work; one rule, because the same-command escape
+# (`git stash -u`) and the state read are shared.
+DISCARD_RULE = "git/discards-uncommitted"
+
+
+def test_checkout_dash_dash_on_dirty_path_blocks(repo):
+    (repo / "ok.txt").write_text("changed\n")     # unstaged: the worktree copy differs from the index
+    assert fired("git checkout -- ok.txt", repo, DISCARD_RULE)
+
+
+def test_the_incident_compound_form_fires(repo, tmp_path):
+    """The real command ran mid-compound with its own stderr hidden; both shapes must survive."""
+    (repo / "ok.txt").write_text("changed\n")
+    cmd = f"cd {repo} && git checkout -- ok.txt 2>/dev/null; git status --porcelain -- ok.txt"
+    assert fired(cmd, tmp_path, DISCARD_RULE)
+
+
+def test_checkout_rev_form_blocks_staged_only(repo):
+    """checkout <rev> -- <path> rewrites the worktree from the rev: a STAGED-only edit (the worktree
+    matches the index) is destroyed too, so it must fire where the index form does not."""
+    (repo / "ok.txt").write_text("changed\n")
+    sh(repo, "add", "ok.txt")                     # X=M, Y=' '
+    assert fired("git checkout HEAD -- ok.txt", repo, DISCARD_RULE)
+
+
+def test_staged_only_index_restore_passes(repo):
+    """`git checkout -- <path>` restores the worktree FROM the index: a staged-only edit already
+    matches the index, so nothing is lost. Firing here would block a no-op."""
+    (repo / "ok.txt").write_text("changed\n")
+    sh(repo, "add", "ok.txt")
+    assert not fired("git checkout -- ok.txt", repo, DISCARD_RULE)
+    assert not fired("git restore --staged ok.txt", repo, DISCARD_RULE)
+
+
+def test_index_only_restore_never_fires(repo):
+    """`git restore --staged` rewrites only the index: the worktree copy keeps every edit, so the
+    work survives as an unstaged change. An index-only write is recoverable — no verdict."""
+    (repo / "ok.txt").write_text("changed\n")     # unstaged only
+    assert not fired("git restore --staged ok.txt", repo, DISCARD_RULE)
+
+
+def test_restore_forms_block_unstaged_dirt(repo):
+    (repo / "ok.txt").write_text("changed\n")
+    assert fired("git restore ok.txt", repo, DISCARD_RULE)
+    assert fired("git restore --source=HEAD ok.txt", repo, DISCARD_RULE)
+    assert fired("git restore -s HEAD ok.txt", repo, DISCARD_RULE)   # the separated source value is a rev, not a path
+    assert not fired("git restore other.txt", repo, DISCARD_RULE)    # a clean path loses nothing
+
+
+def test_forced_switch_blocks_dirty_tree(repo):
+    (repo / "ok.txt").write_text("changed\n")
+    assert fired("git checkout -f main", repo, DISCARD_RULE)
+    assert fired("git switch --discard-changes main", repo, DISCARD_RULE)
+    assert not fired("git checkout main", repo, DISCARD_RULE)        # no force: git carries or refuses
+    assert not fired("git checkout -b feature", repo, DISCARD_RULE)  # a new branch carries the work
+
+
+def test_reset_hard_blocks_tracked_dirt(repo):
+    assert not fired("git reset --hard", repo, DISCARD_RULE)          # clean
+    (repo / "new.txt").write_text("untracked\n")
+    assert not fired("git reset --hard", repo, DISCARD_RULE)          # untracked files survive a hard reset
+    (repo / "ok.txt").write_text("changed\n")
+    assert fired("git reset --hard", repo, DISCARD_RULE)              # unstaged
+    sh(repo, "add", "ok.txt")
+    assert fired("git reset --hard", repo, DISCARD_RULE)              # staged-only is destroyed too
+
+
+def test_clean_force_blocks_untracked(repo):
+    assert not fired("git clean", repo, DISCARD_RULE)                 # git refuses without a force flag
+    assert not fired("git clean -n", repo, DISCARD_RULE)              # dry run deletes nothing
+    (repo / "new.txt").write_text("untracked\n")
+    assert fired("git clean -f", repo, DISCARD_RULE)
+    assert fired("git clean -fd", repo, DISCARD_RULE)
+
+
+def test_stash_u_escape_in_same_command_passes(repo):
+    (repo / "new.txt").write_text("untracked\n")
+    (repo / "ok.txt").write_text("changed\n")
+    assert not fired("git stash -u && git checkout -- ok.txt", repo, DISCARD_RULE)
+
+
+def test_untracked_only_path_restore_passes(repo):
+    """`git checkout -- <untracked>` is a pathspec git ERRORS on, not a loss: '??' rows are no verdict."""
+    (repo / "wip.txt").write_text("untracked\n")
+    assert not fired("git checkout -- wip.txt", repo, DISCARD_RULE)
+
+
+def test_unresolvable_paths_give_no_verdict(repo):
+    (repo / "ok.txt").write_text("changed\n")
+    assert not fired('git checkout -- "$f"', repo, DISCARD_RULE)
+    assert not fired("git checkout -- $f", repo, DISCARD_RULE)
+
+
+def test_discard_follows_cd_and_dash_C(repo, tmp_path):
+    (repo / "ok.txt").write_text("changed\n")
+    assert fired(f"cd {repo} && git checkout -- ok.txt", tmp_path, DISCARD_RULE)
+    assert fired(f"git -C {repo} checkout -- ok.txt", tmp_path, DISCARD_RULE)
+
+
+def test_cache_only_dirt_stays_silent(repo):
+    (repo / ".DS_Store").write_bytes(b"\0")
+    for cmd in ("git checkout -- .", "git checkout -f main", "git restore .",
+                "git reset --hard", "git clean -fdx"):
+        assert not fired(cmd, repo, DISCARD_RULE), cmd
+
+
+def test_a_fired_discard_hit_denies_rather_than_comments(repo):
+    """The emit path, asserted — named distinctly from the two sibling tests of the same claim
+    (two functions sharing a name silently replace each other; see the branch-delete lesson)."""
+    (repo / "ok.txt").write_text("changed\n")
+    hits = wys.evaluate("Bash", {"command": "git checkout -- ok.txt"}, shell="zsh", user="t",
+                        rules=RULES, cwd=str(repo))
+    assert any(h["id"] == DISCARD_RULE for h in hits), "the rule did not fire"
+    out = wys.hook_output(hits)["hookSpecificOutput"]
+    assert out.get("permissionDecision") == "deny", (
+        f"a fired rule that only adds context does not stop anything: {sorted(out)}")
+    assert "permissionDecisionReason" in out
+
+
+def check_discard(cmd, cwd):
+    """The check called DIRECTLY, for the reason check() documents above: evaluate() wraps every
+    check in try/except, so at that seam 'did not fire' and 'raised' are one observation."""
+    return wys.CHECKS["discards_uncommitted"]([], bare_view=cmd, user="t", cwd=str(cwd))
+
+
+def test_the_discard_check_is_total_and_never_raises(repo, tmp_path):
+    """The hook fails OPEN on an exception, so a crash inside this check is a silent ALLOW. The
+    clean repo pins 'no verdict on clean state'; the non-repo pins 'no verdict on unreadable state'."""
+    not_a_repo = tmp_path / "nowhere"
+    not_a_repo.mkdir()
+    for cmd in ("git checkout --", "git checkout -- nonexistent-file", "git restore",
+                "git reset --hard", "git clean -fd", "git switch --discard-changes",
+                "git checkout -- $UNSET", "echo hello", "git status"):
+        for cwd in (repo, not_a_repo):
+            assert check_discard(cmd, cwd) is False, f"{cmd!r} in {cwd.name} raised or fired"
+
+
+def test_mutation_discards_check_is_what_fires(repo, monkeypatch):
+    (repo / "ok.txt").write_text("changed\n")
+    monkeypatch.setitem(wys.CHECKS, "discards_uncommitted", lambda *a, **k: False)
+    assert not fired("git checkout -- ok.txt", repo, DISCARD_RULE)

@@ -623,6 +623,162 @@ def check_stash_untracked(texts, bare_view, cwd=None, **_):
     return False
 
 
+# ---- git/discards-uncommitted: a command that silently discards uncommitted work --------------
+# Measured 2026-10-28 (echoprism Task 10): `git checkout -- <file> 2>/dev/null`, meant to revert a
+# test mutation, also discarded the uncommitted backfill in the same file and exited 0. The
+# pathspec form of checkout/restore restores from the index or a revision and NEVER refuses —
+# unlike a branch switch, which either carries the changes or errors out. `reset --hard` and
+# `clean -f` destroy the same class of work; one rule, because the same-command escape
+# (`git stash -u`) and the repo-state read are shared.
+
+DISCARD_CMD = re.compile(r"\bgit(?:\s+-C\s+(\S+))?\s+(checkout|switch|restore|reset|clean)\b([^;&|]*)")
+REDIRECT_TOK = re.compile(r"^\d*[<>]{1,2}|^&?[<>]{1,2}")   # 2>/dev/null, >f, >>f, 2>&1: not pathspecs
+STASH_U_BEFORE = re.compile(r"\bgit(?:\s+-C\s+\S+)?\s+stash\b[^;&|]*(?:-u|--include-untracked|-a|--all)\b")
+
+
+def _discard_detail(n):
+    return f"{n} uncommitted path{'s' if n != 1 else ''} would be discarded."
+
+
+def _path_loss(d, paths, from_rev):
+    """How many uncommitted paths a checkout/restore of `paths` would discard, or False.
+
+    from_rev (checkout <rev> -- / restore --source): the worktree is rewritten from the rev, so a
+    STAGED-only edit dies too — any real status in either column counts. From the index: only the
+    unstaged difference (column Y) is destroyed; a staged-only file already matches the index, so
+    `checkout --` is a no-op there. Untracked ('??') rows never count: git ERRORS on such a
+    pathspec, it does not lose it. Cache rows never count (the siblings' noise filter). A path the
+    tokenizer could not resolve (a quoted span, a $var) makes the whole match NO VERDICT — it may
+    hold the trap, and guessing a pathspec from 'Q' would be invention.
+    """
+    if not paths or any("Q" in p or "$" in p for p in paths):
+        return False
+    out = git(["status", "--porcelain", "--", *paths], d)
+    if out is None:
+        return False
+    n = 0
+    for ln in out.splitlines():
+        x, y, p = ln[0], ln[1], ln[3:]
+        if x == "?" and y == "?":
+            continue
+        if _is_cache_path(p):
+            continue
+        if from_rev:
+            if x != " " or y != " ":
+                n += 1
+        elif y not in (" ", "?"):
+            n += 1
+    return _discard_detail(n) if n else False
+
+
+def check_discards_uncommitted(texts, bare_view, cwd=None, **_):
+    for m in DISCARD_CMD.finditer(bare_view):
+        toks = [t for t in m.group(3).split() if not REDIRECT_TOK.match(t)]
+        d = resolve_dir(bare_view[: m.start()], m.group(1), cwd)
+        if not d:
+            continue
+        # a `git stash -u` earlier in the SAME command empties the tree first (worktree_add_dirty's escape)
+        if STASH_U_BEFORE.search(bare_view[: m.start()]):
+            continue
+        sub = m.group(2)
+        if sub in ("checkout", "switch"):
+            if "--" in toks:
+                sep = toks.index("--")
+                rev = [t for t in toks[:sep] if not t.startswith("-")] if sub == "checkout" else []
+                loss = _path_loss(d, toks[sep + 1:], bool(rev))
+            elif sub == "switch":
+                # switch never takes pathspecs: its positionals are branches, so only force discards
+                if any(t in ("-f", "--force", "--discard-changes") for t in toks):
+                    real = dirty_paths(d) or []
+                    loss = _discard_detail(len(real)) if real else False
+                else:
+                    loss = False        # a plain switch carries the changes or refuses: no verdict
+            else:
+                force = any(t in ("-f", "--force") for t in toks)
+                pos = [t for t in toks if not t.startswith("-")]
+                if force and not pos:
+                    real = dirty_paths(d) or []
+                    loss = _discard_detail(len(real)) if real else False
+                elif pos:
+                    # Without `--`, git reads ONE resolvable revision as a switch (carries or
+                    # refuses: no loss) and anything else as pathspecs. Resolve before judging:
+                    # `checkout -f main` is a force-switch (any dirt dies), `checkout -f f.txt` is
+                    # a forced path restore (only f.txt's dirt dies).
+                    resolvable = (len(pos) == 1
+                                  and git(["rev-parse", "--verify", "--quiet", pos[0]], d) is not None)
+                    if resolvable:
+                        real = dirty_paths(d) or []
+                        loss = _discard_detail(len(real)) if (force and real) else False
+                    else:
+                        loss = _path_loss(d, pos, from_rev=False)
+                else:
+                    loss = False
+            if loss:
+                return loss
+            continue
+        if sub == "restore":
+            # One pass over the tokens: flags are classified (with --source/-s consuming their
+            # VALUE, which is a rev, never a path), everything else — before or after `--` — is a
+            # pathspec, because restore always takes paths and `--` is optional for it.
+            staged = worktree = source = False
+            paths, after_dd, skip = [], False, False
+            for t in toks:
+                if after_dd:
+                    paths.append(t)
+                    continue
+                if skip:
+                    skip = False
+                    continue
+                if t == "--":
+                    after_dd = True
+                elif t.startswith("-"):
+                    if t in ("--staged", "-S"):
+                        staged = True
+                    elif t in ("--worktree", "-W"):
+                        worktree = True
+                    elif t.startswith("--source="):
+                        source = True
+                    elif t in ("--source", "-s"):
+                        source = True
+                        skip = True
+                    # other flags (--ours, --theirs, ...) change nothing here
+                else:
+                    paths.append(t)
+            if staged and not worktree:
+                continue        # index-only: the worktree copy keeps the work — recoverable
+            loss = _path_loss(d, paths, from_rev=source)
+            if loss:
+                return loss
+            continue
+        if sub == "reset":
+            if "--" in toks:
+                continue        # git refuses a hard reset with paths
+            if "--hard" in toks:
+                out = git(["status", "--porcelain"], d)
+                if out is not None:
+                    rows = [ln[3:] for ln in out.splitlines()
+                            if not ln.startswith("??") and not _is_cache_path(ln[3:])]
+                    if rows:
+                        return _discard_detail(len(rows))
+            continue
+        # clean: every deleting form needs a force flag; -n is a dry run either way
+        letters = "".join(t[1:] for t in toks if re.fullmatch(r"-[A-Za-z]+", t))
+        if "n" in letters or "--dry-run" in toks or not ("f" in letters or "--force" in toks):
+            continue
+        pos = [t for t in toks if not t.startswith("-")]
+        out = git(["status", "--porcelain", "--ignored"] + (["--", *pos] if pos else []), d)
+        if out is None:
+            continue
+        keep = set()
+        for ln in out.splitlines():
+            p = ln[3:]
+            if (ln.startswith("??") or ("x" in letters and ln.startswith("!!"))) and not _is_cache_path(p):
+                keep.add(p)
+        if keep:
+            return _discard_detail(len(keep))
+    return False
+
+
 ARG_LIST_CMDS = ("grep", "find", "ls", "rm", "cp", "mv", "cat", "wc")
 CMD_WRAPPERS = {"sudo", "env", "nohup", "command", "exec", "time", "nice", "stdbuf", "setsid", "xargs"}
 WRAPPER_VALUE_FLAGS = {"-u", "-n"}  # sudo -u USER CMD / nice -n N CMD: the next token is the value
@@ -693,6 +849,7 @@ CHECKS = {
     "stash_untracked": check_stash_untracked,
     "unquoted_var_arglist": check_unquoted_var_arglist,
     "branch_delete_unrecoverable": check_branch_delete_unrecoverable,
+    "discards_uncommitted": check_discards_uncommitted,
 }
 
 
