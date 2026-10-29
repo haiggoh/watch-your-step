@@ -1,6 +1,10 @@
 {
   "_comment": "Every rule needs at least one should_flag and one should_pass case (tests enforce it). Commands are the tool input as the model writes it. HOMEUSER is replaced by the real user name and OTHERUSER by a near-miss of it at test time.",
   "cases": [
+    {"rule": "tool/read-pages-non-pdf", "expect": "flag", "tool": "Read", "tool_input": {"file_path": "/x/src/EpisodeCard.tsx", "pages": "2"}},
+    {"rule": "tool/read-pages-non-pdf", "expect": "flag", "tool": "Read", "tool_input": {"file_path": "/x/notes.md", "pages": "1-3"}},
+    {"rule": "tool/read-pages-non-pdf", "expect": "pass", "tool": "Read", "tool_input": {"file_path": "/x/spec.PDF", "pages": "1-3"}},
+    {"rule": "tool/read-pages-non-pdf", "expect": "pass", "tool": "Read", "tool_input": {"file_path": "/x/src/EpisodeCard.tsx", "offset": 40, "limit": 30}},
     {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "waypoints.py edit x --point \"run `make test` first\""},
     {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "cat > notes.md <<EOF\nuse `rtk` here\nEOF"},
     {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit -m \"fix: the `foo` helper\""},

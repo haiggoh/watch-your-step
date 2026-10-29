@@ -28,6 +28,8 @@ def fill(s):
 
 
 def tool_input(case):
+    if "tool_input" in case:              # a tool call with more than a path (Read pages, Edit)
+        return {k: fill(v) if isinstance(v, str) else v for k, v in case["tool_input"].items()}
     if "file_path" in case:
         return {"file_path": fill(case["file_path"])}
     return {"command": fill(case["command"])}
@@ -54,7 +56,7 @@ def test_rules_schema():
             re.compile(r["pattern"])
 
 
-@pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c['rule']}:{c['expect']}:{c.get('command', c.get('file_path'))[:40]}")
+@pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c['rule']}:{c['expect']}:{str(c.get('command', c.get('file_path', c.get('tool_input'))))[:40]}")
 def test_case(case):
     hits = wys.evaluate(case["tool"], tool_input(case), shell=case.get("shell", "zsh"), user=USER, rules=RULES)
     ids = {h["id"] for h in hits}

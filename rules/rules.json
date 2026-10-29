@@ -280,6 +280,21 @@
       "message": "this git command discards uncommitted changes instead of refusing: git checkout/git restore replace working-tree files from the index or a revision, git reset --hard drops staged and unstaged edits, and git clean -f deletes untracked files — each exits 0.",
       "fix": "commit the work, or park it first (git stash -u, or a WIP branch — a branch is more visible); when discarding really is intended, end the command with  # wys:allow git/discards-uncommitted",
       "incident": "2026-10-28, echoprism Task 10: a git checkout -- src-tauri/src/db/queries.rs 2>/dev/null meant to revert a test mutation also discarded the uncommitted backfill work in the same file; the loss surfaced only when the work had to be redone."
+    },
+    {
+      "id": "tool/read-pages-non-pdf",
+      "severity": "block",
+      "tools": [
+        "Read"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "check": "read_pages_non_pdf",
+      "message": "Read's `pages` parameter applies only to PDFs: on a text file it is silently ignored and the call returns the file from line 1 again, with no error — a re-read that looks like a fresh one.",
+      "fix": "page a text file with  offset=<1-based start line>  limit=<number of lines>",
+      "incident": "2026-10-25, echoprism Phase 5: a .tsx was read with pages 1/2/3 six times in one turn, each returning lines 1-55 again while reporting success; a memory describing the trap was loaded throughout."
     }
   ]
 }

@@ -901,8 +901,16 @@ def check_unquoted_var_arglist(texts, bare_view=None, **_):
     return False
 
 
+def check_read_pages_non_pdf(texts, tool_input=None, **_):
+    """Read's `pages` pages a PDF only; on any other file it is ignored WITHOUT an error and the
+    call returns line 1 again, so a pager loop re-reads the same lines while believing it moved."""
+    ti = tool_input or {}
+    return "pages" in ti and not str(ti.get("file_path", "")).lower().endswith(".pdf")
+
+
 CHECKS = {
     "home_typo": check_home_typo,
+    "read_pages_non_pdf": check_read_pages_non_pdf,
     "truncate_before_read": check_truncate_before_read,
     "equals_word": check_equals_word,
     "staged_conflict_markers": check_staged_conflict_markers,
