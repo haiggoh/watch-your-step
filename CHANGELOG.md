@@ -24,7 +24,7 @@
   false positives); the `git stash -u` escape of `worktree-add-dirty` and `discards-uncommitted` stops at a
   newline; a `# wys:allow` marker counts only in a real comment, not inside a commit message; `test` exits 1
   when a check crashes instead of printing "clean".
-- Tests: 279 pass, plus a 16-mutation matrix (each safeguard removed alone turns its test red) and a suite-wide
+- Tests: 282 pass, plus a 17-mutation matrix (each safeguard removed alone turns its test red) and a suite-wide
   tripwire that fails the run if the real `~/.gitconfig` changes.
 
 ## [0.5.0] - 2026-10-29

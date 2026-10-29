@@ -139,7 +139,9 @@ quote is not installed: report it, never mis-quote it.
   `hook.wys-push-guard.{event=pre-push,command}`.
   - Feature probe, not a version check: if `git -c hook.wysprobe.event=reference-transaction
     -c hook.wysprobe.command=true hook list reference-transaction` does not list `wysprobe`, do
-    nothing and say once that this git cannot host the guard.
+    nothing, silently; `git-guard status` reports it (executor ruling, Task 9: "say once" needs
+    hidden state, saying it every session nags). The probe runs inside a throwaway repo: outside a
+    repository `git hook list` sees no config hooks at all (found in the final review).
   - Keys absent → install + one announce line:
     `🥾 watch-your-step: installed a git branch-deletion guard in ~/.gitconfig (hook.wys-branch-guard, hook.wys-push-guard) — remove: watch-your-step.py git-guard uninstall`.
   - Keys present with `enabled=false` → **the user opted out: never touch them, print nothing.**

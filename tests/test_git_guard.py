@@ -436,3 +436,18 @@ def test_ensure_installs_when_the_session_starts_outside_a_repo(own_global, tmp_
     assert gcfg("hook.wys-branch-guard.event") == "reference-transaction"
     status = wys.git_guard("status", SCRIPT)[1]
     assert "global\twys-branch-guard" in status and "no config-based hooks" not in status
+
+
+def test_ref_in_a_bare_repo_judges_like_any_other(tmp_path, guarded):
+    """Review Focus #3 (owed by the plan): a bare repo has no worktree, but its branches are still
+    the only holders of their commits — the hook must neither crash nor wave a loss through."""
+    bare = tmp_path / "origin.git"
+    sh(guarded, "push", "-q", "origin", "lonely", "merged")
+    assert wys.git_hook_ref("prepared", [f"{Z} {Z} refs/heads/merged"], str(bare))[0] == 0
+    assert wys.git_hook_ref("prepared", [f"{Z} {Z} refs/heads/lonely"], str(bare))[0] == 1
+
+
+def test_ref_with_a_detached_head_is_silent_for_held_and_missing_branches(guarded):
+    sh(guarded, "switch", "-q", "--detach", "lonely")
+    assert wys.git_hook_ref("prepared", [f"{Z} {Z} refs/heads/merged"], str(guarded))[0] == 0
+    assert wys.git_hook_ref("prepared", [f"{Z} {Z} refs/heads/no-such"], str(guarded))[0] == 0
