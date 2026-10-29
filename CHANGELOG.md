@@ -9,10 +9,12 @@
   with a one-line announcement, refreshes a stale script path, and never touches them again after
   `git-guard uninstall` (kept as `enabled=false`). Active only under Claude (`CLAUDECODE`); overrides:
   `git -c hook.wys-branch-guard.enabled=false …` or `WYS_ALLOW_BRANCH_DELETE=1`. Fails open on every error.
-- **Two traps found while building it, both pinned by tests.** Git appends `"$@"` to a one-line hook, so a
+- **Three traps found while building it, all pinned by tests.** Git appends `"$@"` to a one-line hook, so a
   "fail-open" one-liner ending in `exit 0` ran as `exit 0 prepared`, errored, and **aborted an ordinary commit**;
-  the hook now ends in a command that ignores arguments. And `git branch -m` deletes the old ref BEFORE
+  the hook now ends in a command that ignores arguments. `git branch -m` deletes the old ref BEFORE
   creating the new one, so the refs alone cannot tell a rename from a loss; the parent git's argv decides.
+  And outside a repository `git hook list` sees no config hooks at all, so the install's feature probe read
+  every git as unsupported for a session started in `~`; it now probes inside a throwaway repo.
 - **`git/branch-delete-unrecoverable`:** judges quoted names and every name of a multi-name delete, sees
   through `git -c k=v`, and its push-delete half finally fires: the holder exclusion named `origin/x` while refs
   print as `refs/remotes/origin/x`, so the deleted ref always held itself (dead code since 0.4.2). It queries the
