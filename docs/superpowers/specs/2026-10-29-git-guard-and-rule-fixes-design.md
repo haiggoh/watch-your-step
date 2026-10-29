@@ -60,9 +60,40 @@ session, by any route, while ordinary git work stays exactly as fast and as reli
 | A4 | `# wys:allow <id>` anywhere in the raw command disables the rule, even inside a commit message | the marker counts only as a trailing comment of the command: outside any quoted string, at the end of a line |
 | A5 | `test` mode prints "clean" when a check raises; a typo'd check id silently disables a rule | `test` mode prints the exception to stderr and exits non-zero; a suite test asserts every rule's `check` exists in `CHECKS`. Hook mode stays fail-open |
 | A6 | push-delete: up to two `ls-remote` calls of 3 s each per refspec can exceed the 10 s hook timeout, and then the harness kills the hook and the command runs unevaluated | ONE `ls-remote --symref <remote> HEAD refs/heads/*` per remote per evaluation, cached; total network budget ≤ 4 s, over budget = no verdict |
-| A7 | `shell/truncate-before-read` false-positives when the target is read or merely named in an EARLIER command of a `;`/`&&`/`\|\|`/newline chain. Real incidents: `cp X /tmp/X.new && git show HEAD:X > X` (twice, 2026-10-27) and `echo a > a && git add -A && git commit -qm a` | judge reads only within the SAME pipeline as the redirect (`cat X \| sort > X`, `sort X > X` must still block) |
+| A7 | `shell/truncate-before-read` false-positives. Real incidents: `cp X /tmp/X.new && git show HEAD:X > X` (twice, 2026-10-27) and `echo a > a && git add -A && git commit -qm a`. **Corrected after reading the engine:** the check already splits on `;`/`&&`/`\|\|`/newline, so the earlier commands are not the cause. The two causes are inside the redirect's own segment: (1) the boundary lookbehind lacks `:`, so the `X` in the git object spec `HEAD:X` reads as a file read; (2) `echo`/`printf`/`print` never read their arguments, yet an argument word equal to the target counts | a target preceded by `:` is not a read; a segment whose command word is `echo`/`printf`/`print` reads nothing. `cat X \| sort > X`, `sort X > X`, `grep p X > X` must still block |
 | A8 | the branch-delete matcher handles `git -C dir` but not `git -c k=v` prefixes | accept any number of `-C <dir>` / `-c <k=v>` global options before the subcommand |
 | A9 | the command-line rule knows neither override of Part B | `WYS_ALLOW_BRANCH_DELETE=1 git …` and `git -c hook.wys-branch-guard.enabled=false …` (pre-push: `wys-push-guard`) also count as a deliberate override for `git/branch-delete-unrecoverable` |
+
+Additional defects found while reading the engine (same release, same rule):
+
+| # | Defect | Required behaviour |
+|---|---|---|
+| A10 | `_remote_head` / `_remote_sha` query `origin` whatever remote the push names | query the remote the command names |
+| A11 | quoted names are invisible because `bare_view` replaces every quoted span with `Q` | a literal view: simple quoted spans (no `$`, backtick or whitespace) keep their content, everything else stays `Q`; heredoc bodies and comments excluded exactly as in `bare_view` |
+
+## Part C — `worktree-add-dirty` stash escape spans newlines (waypoint `watch-your-step-worktree-add`)
+
+`check_worktree_add_dirty`'s same-command `git stash -u` escape, and the identical `STASH_U_BEFORE`
+in `discards_uncommitted`, use `[^;&|]*`, which crosses a newline: words on a later line are read
+as stash flags. Add `\n` to both classes, pin each with a RED-first test where only a later line
+mentions `-u`, and replace the forward reference at `bin/watch-your-step.py:681` with the fact.
+
+## Part D — `Read` with `pages` on a non-PDF (waypoint `barrier-needed-read-s-pages`, Read half)
+
+New block rule `tool/read-pages-non-pdf` for the `Read` tool: a `pages` key present (any value)
+and a `file_path` not ending in `.pdf` (case-insensitive) → deny with the fix
+`use offset=<1-based line> limit=<n>; pages applies only to PDFs`. Checks get the full `tool_input`
+(today non-Bash tools pass only the path). The waypoint's Edit half (refuse an `old_string` never
+Read this session) needs per-session read tracking a hook cannot see; it stays open on the waypoint.
+
+## Part E — `Edit` anchor matching mid-indent (waypoint `pretooluse-edit-guard-flag-an`)
+
+New block rule `tool/edit-anchor-mid-indent` for `Edit` and each entry of `MultiEdit`: when
+`old_string` begins with a space or tab, the target file exists, and an occurrence of `old_string`
+sits after one or more whitespace-only characters on its line (the 8-space anchor inside a
+12-space line, measured 2026-10-28), deny with the fix `anchor on the whole line, at its exact
+indentation`. A match at line start, a match after non-whitespace (replacing a substring inside a
+line), and an `old_string` starting with a newline never fire. Unreadable or missing file → no verdict.
 
 ## Part B — the git-level guard
 
