@@ -401,3 +401,13 @@ def test_python_starts_only_for_a_branch_deletion(own_global, guarded, tmp_path)
     assert not marker.exists(), "Python started for a creation or an update"
     g(guarded, "branch", "-D", "fresh")
     assert marker.exists(), "the deletion never reached the script"
+
+
+def test_an_uninstalled_guard_survives_a_plugin_update_untouched(own_global):
+    """After `uninstall`, a later ensure from a NEW plugin path (an update) must not rewrite the
+    disabled hooks either — 'never touch them' covers the path, not only the enabled flag."""
+    wys.git_guard("ensure", "/cache/0.6.0/bin/watch-your-step.py")
+    wys.git_guard("uninstall", "/cache/0.6.0/bin/watch-your-step.py")
+    before = own_global.read_text()
+    assert wys.git_guard("ensure", "/cache/0.6.1/bin/watch-your-step.py") == (0, "")
+    assert own_global.read_text() == before
