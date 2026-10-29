@@ -37,6 +37,13 @@
     {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' config.txt > config.txt.tmp && mv config.txt.tmp config.txt"},
     {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "sort a.txt >> a.txt.log; cmd 2>&1 > out.txt"},
     {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "python3 -c \"s=open(p).read(); open(p,'w').write(s.replace('a','b'))\""},
+    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "cd ~/ClaudeWorkspace/echoprism && cp src/components/feed/EpisodeCard.tsx /tmp/ec.new && git show HEAD:src/components/feed/EpisodeCard.tsx > src/components/feed/EpisodeCard.tsx"},
+    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "echo a > a && git add -A && git commit -qm a"},
+    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "printf x > x"},
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "cat X | sort > X"},
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "sort X > X"},
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "grep p X > X; echo done"},
+    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "echo start; sort cfg > cfg"},
 
     {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "ls; echo ====; ls -la"},
     {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "[ \"$a\" == \"b\" ] && echo same"},

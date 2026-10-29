@@ -231,13 +231,21 @@ REDIRECT = re.compile(r"(?<![>&\d])>(?![>&])[ \t]*([^\s;&|<>()]+)")
 PY_TRUNCATE = re.compile(r"open\(\s*([\w.\[\]'\"]+)\s*,\s*['\"]w['\"]\s*\)\s*\.write\(\s*open\(\s*\1\s*\)\s*\.read")
 
 
+NON_READERS = ("echo", "printf", "print")  # print their ARGUMENTS; they never open them as files
+
+
 def check_truncate_before_read(texts, bare_view, **_):
     for chain in re.split(r"&&|\|\||[;\n]", bare_view):
         for m in REDIRECT.finditer(chain):
             target = m.group(1)
             if target in ("/dev/null", "Q"):
                 continue
-            if re.search(r"(?<![\w./-])" + re.escape(target) + r"(?![\w./-])", chain[: m.start()]):
+            before = chain[: m.start()]
+            stages = before.split("|")
+            if _cmd_word(stages[-1]) in NON_READERS:
+                before = "|".join(stages[:-1])   # `echo a > a` reads nothing; earlier stages still can
+            # ':' too: the X in a git object spec `HEAD:X` names a blob, not the file on disk
+            if re.search(r"(?<![\w./:-])" + re.escape(target) + r"(?![\w./-])", before):
                 return True
     return any(PY_TRUNCATE.search(t) for t in texts)
 
