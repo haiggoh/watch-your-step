@@ -14,7 +14,8 @@ spec.loader.exec_module(wys)
 RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
 TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored", "git/worktree-add-dirty",
           "git/stash-untracked", "git/branch-delete-unrecoverable", "git/discards-uncommitted"}
-TESTED_ELSEWHERE = {"zsh/unmatched-glob"}  # proven in tests/test_unmatched_glob.py
+TESTED_ELSEWHERE = {"zsh/unmatched-glob",            # proven in tests/test_unmatched_glob.py
+                    "tool/edit-anchor-mid-indent"}   # proven in tests/test_tool_rules.py
 MARKED = "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n"
 
 
