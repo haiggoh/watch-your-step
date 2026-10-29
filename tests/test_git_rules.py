@@ -470,6 +470,80 @@ def test_a_fired_branch_delete_hit_denies_rather_than_comments(origin_repo, tmp_
     assert "permissionDecisionReason" in out
 
 
+# --- 0.6.0: the shapes agents actually type (measured 2026-10-28/29 on v0.5.0: all CLEAN) ---------
+
+def _remote_only(repo, remote="origin"):
+    """Push topic to `remote`, then delete the LOCAL topic: its commit now lives only there."""
+    sh(repo, "push", "-q", remote, "topic")
+    sh(repo, "branch", "-D", "topic")
+    sh(repo, "fetch", "-q", remote)
+
+
+def test_branch_delete_judges_quoted_names(origin_repo):
+    assert fired('git branch -D "topic"', origin_repo, RULE)
+    assert fired("git branch -D 'topic'", origin_repo, RULE)
+
+
+def test_branch_delete_judges_every_name_not_only_the_first(origin_repo):
+    sh(origin_repo, "branch", "merged-tip")
+    assert fired("git branch -D merged-tip topic", origin_repo, RULE)
+
+
+def test_branch_delete_sees_through_dash_c_options(origin_repo):
+    assert fired("git -c core.quotepath=off branch -D topic", origin_repo, RULE)
+    assert fired("git -C . -c a.b=c branch -D topic", origin_repo, RULE)
+
+
+def test_branch_delete_slash_name_is_judged(origin_repo):
+    sh(origin_repo, "branch", "feat/x", "topic")
+    sh(origin_repo, "branch", "-D", "topic")
+    assert fired("git branch -D feat/x", origin_repo, RULE)
+
+
+def test_branch_delete_honours_both_git_guard_overrides(origin_repo):
+    assert not fired("WYS_ALLOW_BRANCH_DELETE=1 git branch -D topic", origin_repo, RULE)
+    assert not fired("git -c hook.wys-branch-guard.enabled=false branch -D topic", origin_repo, RULE)
+
+
+def test_push_delete_of_a_remote_only_branch_blocks_both_forms(origin_repo):
+    """Was dead code: the holder exclusion named 'origin/topic' while `git branch -a` prints
+    'remotes/origin/topic', so the branch being deleted always held itself."""
+    _remote_only(origin_repo)
+    assert fired("git push origin --delete topic", origin_repo, RULE)
+    assert fired("git push origin :topic", origin_repo, RULE)
+
+
+def test_push_delete_queries_the_remote_the_command_names(origin_repo, tmp_path):
+    up = tmp_path / "upstream.git"
+    sh(tmp_path, "init", "-q", "--bare", str(up))
+    sh(origin_repo, "remote", "add", "upstream", str(up))
+    _remote_only(origin_repo, "upstream")
+    assert fired("git push upstream --delete topic", origin_repo, RULE)
+
+
+def test_push_delete_honours_both_git_guard_overrides(origin_repo):
+    _remote_only(origin_repo)
+    assert not fired("WYS_ALLOW_BRANCH_DELETE=1 git push origin --delete topic", origin_repo, RULE)
+    assert not fired("git -c hook.wys-push-guard.enabled=false push origin --delete topic", origin_repo, RULE)
+
+
+def test_push_delete_asks_the_remote_once(origin_repo, monkeypatch):
+    """One ls-remote per (remote, branch): two sequential 3 s calls per refspec could outlast the
+    10 s hook timeout, and a killed hook lets the command run unevaluated (review D8)."""
+    _remote_only(origin_repo)
+    calls, real = [], wys.git
+    monkeypatch.setattr(wys, "git", lambda args, cwd, **kw: (calls.append(args) if args[0] == "ls-remote" else None) or real(args, cwd, **kw))
+    assert fired("git push origin --delete topic", origin_repo, RULE)
+    assert len(calls) == 1, calls
+
+
+def test_unrecoverable_predicate(origin_repo):
+    tip = subprocess.run(["git", "rev-parse", "topic"], cwd=origin_repo, capture_output=True, text=True).stdout.strip()
+    assert wys.unrecoverable(str(origin_repo), tip, {"refs/heads/topic"})
+    assert not wys.unrecoverable(str(origin_repo), tip, {"refs/heads/topic"}, extra_holders={tip})
+    assert not wys.unrecoverable(str(origin_repo), tip, set())      # topic itself still holds it
+
+
 def check(cmd, cwd):
     """The check called DIRECTLY, not through evaluate().
 

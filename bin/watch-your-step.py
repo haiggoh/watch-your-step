@@ -295,9 +295,9 @@ def _dir_is_all_cache(d):
     return True
 
 
-def git(args, cwd):
+def git(args, cwd, timeout=3):
     import subprocess
-    p = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=3)
+    p = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=timeout)
     return p.stdout if p.returncode == 0 else None
 
 
@@ -378,53 +378,78 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
 # REMOTE's HEAD points at, and stops refusing the moment origin/HEAD points elsewhere — which is the
 # shape of a repo that renamed its default after cloning (echoprism ships `master`). Neither case is
 # reachable by the worktree rules above, which look at FILES, not at commit reachability.
-BRANCH_DELETE_LOCAL = re.compile(
-    r"\bgit(\s+-C\s+(\S+))?\s+branch\s+((?:-{1,2}\S+\s+)+)([^\s;&|]+)")
-PUSH_DELETE = re.compile(r"\bgit(\s+-C\s+(\S+))?\s+push\s+([^;&|]+)")
+# `git` followed by any number of global options: -C <dir> moves the repo, -c <k=v> sets config
+# (an agent writes `git -c core.quotepath=off branch -D x` as often as the bare form).
+GIT_PREFIX = r"\bgit((?:\s+-[Cc]\s+\S+)*)"
+BRANCH_DELETE_LOCAL = re.compile(GIT_PREFIX + r"\s+branch\s+([^;&|\n]*)")
+PUSH_DELETE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
+BRANCH_DELETE_FLAGS = ("-d", "-D", "--delete")
+# The git guard's own overrides (0.6.0) also count as a deliberate deletion here, so the two layers
+# never disagree about what "I really mean it" looks like.
+ALLOW_ENV = re.compile(r"(?:^|[\s;&|(])(?:export\s+)?WYS_ALLOW_BRANCH_DELETE=1\b")
+GUARD_OFF = {"branch": "hook.wys-branch-guard.enabled=false", "push": "hook.wys-push-guard.enabled=false"}
 # Conventional default-branch names, checked as a NAMED pair rather than resolved from the repo:
 # deleting either from a remote breaks every consumer that resolves it, whatever origin/HEAD says.
 # A remote branch that origin/HEAD itself points at is NOT flagged — git refuses that deletion, so
 # nothing would be lost and a warning there is noise over a refusal.
 DEFAULT_NAMES = ("main", "master")
+LS_REMOTE_BUDGET = 4.0   # seconds for every ls-remote of one evaluation; the hook timeout is 10
 
 
-def _remote_head(d):
-    """The branch the REMOTE's HEAD points at — the one `git push --delete` refuses to delete.
-    Queried, not read from refs/remotes/origin/HEAD: that ref is written by `git clone` and
-    `git remote set-head` and is absent in a `git init` + `git remote add` repo, and it is the
-    remote's answer that decides the refusal anyway."""
-    out = git(["ls-remote", "--symref", "origin", "HEAD"], d) or ""
+def _git_opts(opts):
+    """(the last -C dir or None, the set of -c values) from GIT_PREFIX's captured options."""
+    toks = opts.split()
+    cdir = next((toks[i + 1] for i in range(len(toks) - 2, -1, -1) if toks[i] == "-C"), None)
+    return cdir, {toks[i + 1] for i in range(len(toks) - 1) if toks[i] == "-c"}
+
+
+def _deliberate(view, m, kind, cfg):
+    return GUARD_OFF[kind] in cfg or bool(ALLOW_ENV.search(view[: m.start()]))
+
+
+def unrecoverable(d, tip, exclude, extra_holders=frozenset()):
+    """True when the commit `tip` would be reachable from no ref outside `exclude` — the one
+    predicate the command-line rule and both git hooks share.
+
+    exclude: full ref names being deleted (refs/heads/x, refs/remotes/origin/x). extra_holders:
+    commit ids a ref is being SET to in the same operation (a rename, a delete-and-recreate) —
+    they hold `tip` when it is one of them or an ancestor. A commit absent from this repo is held
+    by nothing here. False whenever git cannot answer: no verdict, never a guess."""
+    if git(["cat-file", "-e", f"{tip}^{{commit}}"], d) is None:
+        return True
+    for oid in extra_holders:
+        if oid == tip or git(["merge-base", "--is-ancestor", tip, oid], d) is not None:
+            return False
+    out = git(["for-each-ref", "--contains", tip, "--format=%(refname)"], d)
+    if out is None:
+        return False
+    # a symbolic */HEAD only aliases another ref, so it never holds anything on its own
+    return not [r for r in out.split() if r not in exclude and not r.endswith("/HEAD")]
+
+
+def _remote_state(d, remote, name, deadline):
+    """(the branch the remote's HEAD points at, the remote sha of `name`) from ONE ls-remote.
+    Queried, not read from refs/remotes/<remote>/HEAD: that ref is absent in a `git init` +
+    `git remote add` repo, and the remote's own answer is what decides git's refusal anyway."""
+    import time
+    left = deadline - time.monotonic()
+    if left <= 0:
+        return None, None
+    out = git(["ls-remote", "--symref", remote, "HEAD", f"refs/heads/{name}"], d, timeout=left) or ""
+    head = sha = None
     for ln in out.splitlines():
         if ln.startswith("ref:"):
             ref = ln[4:].split("\t")[0].strip()
             if ref.startswith("refs/heads/"):
-                return ref[len("refs/heads/"):]
-    return None
-
-
-def _remote_sha(d, name):
-    out = git(["ls-remote", "origin", name], d) or ""
-    for ln in out.splitlines():
-        parts = ln.split()
-        if len(parts) >= 2:
-            return parts[0]
-    return None
-
-
-def _holders(d, rev, exclude):
-    """Every ref OTHER than `exclude` whose history already contains `rev`."""
-    out = git(["branch", "-a", "--contains", rev], d) or ""
-    names = []
-    for ln in out.splitlines():
-        n = ln[2:].strip() if ln[:2] in ("* ", "+ ") else ln.strip()
-        if n and n not in exclude:
-            names.append(n)
-    return names
+                head = ref[len("refs/heads/"):]
+        elif ln.endswith(f"\trefs/heads/{name}"):
+            sha = ln.split("\t")[0]
+    return head, sha
 
 
 def _push_delete(args):
     """(remote, branch) when these `git push` args delete a remote branch, else None."""
-    toks = [t for t in args.split() if t]
+    toks = [t for t in args.split() if t and not REDIRECT_TOK.match(t)]
     if not toks:
         return None
     colon = next((t for t in toks if t.startswith(":") and len(t) > 1), None)
@@ -450,50 +475,62 @@ def _push_delete(args):
     return remote, (name.rsplit(":", 1)[-1] if ":" in name else name)
 
 
-def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, **_):
-    for m in BRANCH_DELETE_LOCAL.finditer(bare_view):
-        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
-        if not d:
-            continue
-        flags = m.group(3).split()
-        if not any(f in ("-d", "-D", "--delete") for f in flags):
+def _resolvable(word):
+    return bool(word) and "Q" != word and "$" not in word and "`" not in word
+
+
+def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, lit_view=None, **_):
+    import time
+    view = lit_view if lit_view is not None else bare_view
+    for m in BRANCH_DELETE_LOCAL.finditer(view):
+        cdir, cfg = _git_opts(m.group(1))
+        toks = [t for t in m.group(2).split() if not REDIRECT_TOK.match(t)]
+        if not any(t in BRANCH_DELETE_FLAGS for t in toks):
             continue                      # `git branch -v`, `--show-current`: not a deletion
-        name = m.group(4)
-        if not name or name.startswith("-"):
-            continue                      # a quoted or missing name: no verdict
-        if git(["rev-parse", "--verify", "--quiet", f"refs/heads/{name}"], d) is None:
-            continue                      # no such local branch: git errors, nothing is lost
-        if name in DEFAULT_NAMES:
-            return True                   # the default branch itself: never delete it
-        # No separate merged-into-the-default test: if a branch's tip is an ancestor of the default
-        # branch, the default branch IS a holder, so `_holders` already covers it. Removing that
-        # check was measured to leave the suite green — a branch nothing can exercise.
-        if _holders(d, name, {name}):
-            continue                      # another local branch or origin/<name> still holds it
-        return True
-    for m in PUSH_DELETE.finditer(bare_view):
-        d = resolve_dir(bare_view[: m.start()], m.group(2), cwd)
+        if _deliberate(view, m, "branch", cfg):
+            continue
+        d = resolve_dir(view[: m.start()], cdir, cwd)
         if not d:
             continue
-        target = _push_delete(m.group(3))
-        if not target:
+        # every name is judged; one the tokenizer cannot resolve ($var, a spaced string) gets no
+        # verdict on its own, without hiding the names around it
+        names = [t for t in toks if not t.startswith("-") and _resolvable(t)]
+        exclude = {f"refs/heads/{n}" for n in names}
+        for name in names:
+            tip = git(["rev-parse", "--verify", "--quiet", f"refs/heads/{name}^{{commit}}"], d)
+            if tip is None:
+                continue                  # no such local branch: git errors, nothing is lost
+            if name in DEFAULT_NAMES:
+                return True               # the default branch itself: never delete it
+            # No separate merged-into-the-default test: if a branch's tip is an ancestor of the
+            # default branch, the default branch IS a holder — measured redundant in 0.4.2.
+            if unrecoverable(d, tip.strip(), exclude):
+                return True
+    deadline = time.monotonic() + LS_REMOTE_BUDGET
+    seen = set()
+    for m in PUSH_DELETE.finditer(view):
+        cdir, cfg = _git_opts(m.group(1))
+        target = _push_delete(m.group(2))
+        if not target or not all(_resolvable(t) for t in target):
             continue
+        if _deliberate(view, m, "push", cfg):
+            continue
+        d = resolve_dir(view[: m.start()], cdir, cwd)
+        if not d or (d, target) in seen:
+            continue
+        seen.add((d, target))
         remote, name = target
-        if not name or name.startswith("-"):
-            continue
-        head = _remote_head(d)
+        head, sha = _remote_state(d, remote, name, deadline)
         if head is not None and name == head:
             continue                      # git refuses it: nothing would be lost, no verdict
-        sha = _remote_sha(d, name)
         if sha is None:
-            continue                      # not on the remote: git errors, nothing is lost
+            continue                      # not on the remote (or out of budget): no verdict
         if name in DEFAULT_NAMES:
             # A conventional default the remote's HEAD no longer points at: git permits it, and it
             # breaks every consumer that resolves that name even though the local copy survives.
             return True
-        if _holders(d, sha, {f"{remote}/{name}", name}):
-            continue                      # a local branch or another ref already holds the commits
-        return True
+        if unrecoverable(d, sha, {f"refs/remotes/{remote}/{name}"}):
+            return True
     return False
 
 
