@@ -972,10 +972,44 @@ def _refusal(what, why, native, env):
             f"    {native}\n    {env}\n")
 
 
-def git_hook_ref(phase, lines, d):
+def _parent_is_branch_move():
+    """True when the git process that opened this transaction is `git branch -m/-M/--move`.
+
+    Measured (git 2.56): a rename DELETES the old ref first and creates the new one in a later
+    transaction, so at `prepared` the new name does not exist yet and the refs alone cannot tell a
+    rename from a loss. The argv of the git process that runs the hook can: it is the first `git`
+    ancestor (python sits under the one-liner's sh, which sits under that git). A move never loses
+    commits. When ps cannot answer, or no git ancestor is found in 4 levels: False — a refusal,
+    overridable."""
+    import subprocess
+    pid = os.getppid()
+    for _ in range(4):
+        try:
+            p = subprocess.run(["ps", "-o", "ppid=,args=", "-p", str(pid)],
+                               capture_output=True, text=True, timeout=2)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        f = p.stdout.split()
+        if len(f) < 2:
+            return False
+        ppid, toks = f[0], f[1:]
+        if os.path.basename(toks[0]) == "git":
+            if "branch" not in toks:
+                return False
+            after = toks[toks.index("branch") + 1:]
+            return any(t in ("-m", "-M", "--move") or re.fullmatch(r"-[a-zA-Z]*[mM][a-zA-Z]*", t)
+                       for t in after)
+        if not ppid.isdigit() or int(ppid) <= 1:
+            return False
+        pid = int(ppid)
+    return False
+
+
+def git_hook_ref(phase, lines, d, renaming=False):
     """(exit code, message) for one reference-transaction call. Only `prepared` can refuse: the
-    refs are locked and the transaction can still be aborted there, never after it."""
-    if phase != "prepared":
+    refs are locked and the transaction can still be aborted there, never after it. `renaming`:
+    the transaction belongs to a `git branch -m` (see _parent_is_branch_move)."""
+    if phase != "prepared" or renaming:
         return 0, ""
     deletions, holders = [], set()
     for ln in lines:
@@ -1034,7 +1068,10 @@ def cmd_git_hook(args, stdin_text, cwd):
     try:
         lines = stdin_text.splitlines()
         if args[:1] == ["ref"] and len(args) >= 2:
-            code, msg = git_hook_ref(args[1], lines, cwd)
+            deleting = args[1] == "prepared" and any(
+                len(f) >= 3 and _is_zero(f[1]) and f[2].startswith("refs/heads/")
+                for f in (ln.split() for ln in lines))
+            code, msg = git_hook_ref(args[1], lines, cwd, renaming=deleting and _parent_is_branch_move())
         elif args[:1] == ["push"] and len(args) >= 2:
             code, msg = git_hook_push(args[1], lines, cwd)
         else:
@@ -1045,6 +1082,117 @@ def cmd_git_hook(args, stdin_text, cwd):
         return 0
     if msg:
         sys.stderr.write(msg)
+    return code
+
+
+GUARD_EVENTS = {"ref": "reference-transaction", "push": "pre-push"}
+
+
+def guard_command(kind, script):
+    """The one-liner git runs. Its SHAPE is load-bearing: git appends "$@" to a one-line hook, so
+    the LAST command must accept arbitrary arguments — an `exit 0` there runs as `exit 0 prepared`,
+    errors, and aborts the transaction (measured: an ordinary commit failed). The ref hook ends in
+    `true` (ignores them), the push hook in the `exec` that consumes them.
+
+    The ref hook fires for EVERY ref update, so Python starts only when a stdin line is a
+    refs/heads/ deletion (a zero NEW oid): 74 ms per transaction otherwise, against 9 ms with no
+    guard. Outside Claude or with the script gone, nothing past the first tests runs."""
+    head = ('[ -n "$CLAUDECODE" ] || exit 0; [ "${WYS_ALLOW_BRANCH_DELETE:-}" = 1 ] && exit 0; '
+            f"f='{script}'; [ -f \"$f\" ] || exit 0; ")
+    if kind == "push":
+        return head + 'exec python3 "$f" git-hook push'
+    return (head + '[ "$1" = prepared ] || exit 0; l=$(cat); case "$l" in *" ' + ZERO_OID
+            + ' refs/heads/"*) printf \'%s\\n\' "$l" | python3 "$f" git-hook ref prepared || exit 1;; '
+            "esac; true")
+
+
+def _gcfg(*args):
+    import subprocess
+    p = subprocess.run(["git", "config", "--global", *args], capture_output=True, text=True, timeout=5)
+    return p.stdout.strip() if p.returncode == 0 else None
+
+
+def _set_global(key, value):
+    import subprocess
+    p = None
+    for _ in range(5):                    # a concurrent session may hold the config lock briefly
+        p = subprocess.run(["git", "config", "--global", "--replace-all", key, value],
+                           capture_output=True, text=True, timeout=5)
+        if p.returncode == 0:
+            return
+        import time
+        time.sleep(0.1)
+    raise RuntimeError((p.stderr.strip() if p else "") or f"git config {key} failed")
+
+
+def _config_hooks_supported():
+    import subprocess
+    p = subprocess.run(["git", "-c", "hook.wysprobe.event=reference-transaction", "-c",
+                        "hook.wysprobe.command=true", "hook", "list", "reference-transaction"],
+                       capture_output=True, text=True, timeout=5)
+    return "wysprobe" in p.stdout
+
+
+def git_guard(action, script=None):
+    """(exit code, text to print) for `git-guard ensure|install|uninstall|status`. Writes ONLY
+    hook.wys-branch-guard.* and hook.wys-push-guard.* in the GLOBAL config, which git's own
+    `git hook list --show-scope` displays, and never re-enables a guard the user disabled."""
+    script = os.path.realpath(script or __file__)
+    names = {kind: f"hook.{GUARD_NAMES[kind]}" for kind in GUARD_NAMES}
+    if action == "status":
+        import subprocess
+        lines = []
+        for kind, event in GUARD_EVENTS.items():
+            p = subprocess.run(["git", "hook", "list", "--show-scope", event], capture_output=True, text=True)
+            lines.append(f"{event}: " + (p.stdout.strip().replace("\n", "; ") or "(no hooks)"))
+            lines.append(f"  {names[kind]}.enabled = {_gcfg(names[kind] + '.enabled') or 'unset (on)'}")
+        lines.append(f"  script: {script} ({'present' if os.path.isfile(script) else 'MISSING'})")
+        return 0, "\n".join(lines) + "\n"
+    if action == "uninstall":
+        for kind in GUARD_NAMES:
+            _set_global(names[kind] + ".enabled", "false")
+        return 0, (f"{MARK}: git guard disabled (hook.wys-*-guard.enabled=false in ~/.gitconfig; "
+                   "it stays off — re-enable with: watch-your-step.py git-guard install)\n")
+    if "'" in script:
+        return 0, f"{MARK}: git guard not installed — its path contains a single quote: {script}\n"
+    if not _config_hooks_supported():
+        return 0, ""                      # this git has no config-based hooks; `status` says so
+    if action == "install":
+        for kind in GUARD_NAMES:
+            _set_global(names[kind] + ".enabled", "true")
+    installed = updated = False
+    for kind, event in GUARD_EVENTS.items():
+        key = names[kind]
+        if _gcfg(key + ".enabled") == "false":
+            continue                      # the user opted out: never touch it again
+        want = guard_command(kind, script)
+        have = _gcfg(key + ".command")
+        if (_gcfg("--get-all", key + ".event") or "").splitlines() != [event]:
+            _set_global(key + ".event", event)
+        if have is None:
+            installed = True
+        elif have != want:
+            updated = True
+        if have != want:
+            _set_global(key + ".command", want)
+    if installed:
+        return 0, (f"{MARK}: installed a git branch-deletion guard in ~/.gitconfig "
+                   "(hook.wys-branch-guard, hook.wys-push-guard) — remove: watch-your-step.py git-guard uninstall\n")
+    if updated:
+        return 0, f"{MARK}: updated the git guard's script path to {script}\n"
+    return 0, ""
+
+
+def cmd_git_guard(args):
+    if len(args) != 1 or args[0] not in ("ensure", "install", "uninstall", "status"):
+        sys.stderr.write("usage: watch-your-step.py git-guard ensure|install|uninstall|status\n")
+        return 2
+    try:
+        code, out = git_guard(args[0])
+    except Exception as e:                # never break a session start over the guard
+        sys.stdout.write(f"{MARK}: git guard {args[0]} failed, nothing changed ({type(e).__name__}: {e})\n")
+        return 0
+    sys.stdout.write(out)
     return code
 
 
@@ -1184,6 +1332,8 @@ def main(argv):
         return cmd_rules()
     if cmd == "git-hook":
         return cmd_git_hook(rest, sys.stdin.read(), os.getcwd())
+    if cmd == "git-guard":
+        return cmd_git_guard(rest)
     sys.stderr.write(f"watch-your-step: unknown argument {cmd!r}\n")
     usage(sys.stderr)
     return 2
