@@ -584,15 +584,22 @@ def test_stash_u_escape_in_same_command_passes(repo):
 
 
 def test_untracked_only_path_restore_passes(repo):
-    """`git checkout -- <untracked>` is a pathspec git ERRORS on, not a loss: '??' rows are no verdict."""
+    """`git checkout -- <untracked>` is a pathspec git ERRORS on, not a loss: '??' rows are no verdict.
+    The rev form needs its own pin — without it, dropping the '??' guard stays green because the
+    from-the-index branch already excludes '?' via the column test, and the guard is load-bearing
+    only when the worktree is rewritten from a rev (found by the mutation matrix)."""
     (repo / "wip.txt").write_text("untracked\n")
     assert not fired("git checkout -- wip.txt", repo, DISCARD_RULE)
+    assert not fired("git checkout HEAD -- wip.txt", repo, DISCARD_RULE)
 
 
 def test_unresolvable_paths_give_no_verdict(repo):
     (repo / "ok.txt").write_text("changed\n")
     assert not fired('git checkout -- "$f"', repo, DISCARD_RULE)
     assert not fired("git checkout -- $f", repo, DISCARD_RULE)
+    # the conservative whole-match rule: one unresolvable pathspec silences even the resolvable
+    # one beside it — judging only ok.txt would fire here, which is the mutation that must go red
+    assert not fired('git checkout -- "$f" ok.txt', repo, DISCARD_RULE)
 
 
 def test_discard_follows_cd_and_dash_C(repo, tmp_path):
