@@ -1,3 +1,32 @@
+## [0.6.0] - 2026-10-29
+
+- **New: a git-level branch guard.** A PreToolUse hook only sees the command an agent types, and a branch
+  deletion also arrives through `$VAR`, `bash -c`, `git update-ref -d`, scripts and Python subprocesses — all
+  measured CLEAN on 0.5.0. Git's own `reference-transaction` hook is the step every route passes through, so
+  watch-your-step now installs it (`hook.wys-branch-guard`) plus a `pre-push` guard (`hook.wys-push-guard`) as
+  **config-based hooks in the global git config**: they add to a repo's `.git/hooks` and never replace them,
+  and `git hook list --show-scope` shows them. `git-guard ensure` runs at session start, installs them once
+  with a one-line announcement, refreshes a stale script path, and never touches them again after
+  `git-guard uninstall` (kept as `enabled=false`). Active only under Claude (`CLAUDECODE`); overrides:
+  `git -c hook.wys-branch-guard.enabled=false …` or `WYS_ALLOW_BRANCH_DELETE=1`. Fails open on every error.
+- **Two traps found while building it, both pinned by tests.** Git appends `"$@"` to a one-line hook, so a
+  "fail-open" one-liner ending in `exit 0` ran as `exit 0 prepared`, errored, and **aborted an ordinary commit**;
+  the hook now ends in a command that ignores arguments. And `git branch -m` deletes the old ref BEFORE
+  creating the new one, so the refs alone cannot tell a rename from a loss; the parent git's argv decides.
+- **`git/branch-delete-unrecoverable`:** judges quoted names and every name of a multi-name delete, sees
+  through `git -c k=v`, and its push-delete half finally fires: the holder exclusion named `origin/x` while refs
+  print as `refs/remotes/origin/x`, so the deleted ref always held itself (dead code since 0.4.2). It queries the
+  remote the command names (not always `origin`), with one `ls-remote` per target inside a 4 s budget.
+- **New rule `tool/read-pages-non-pdf` (block):** `Read` with `pages` on a non-PDF, which silently returns line 1.
+- **New rule `tool/edit-anchor-mid-indent` (block):** an indentation-led `old_string` matching inside a deeper
+  indentation, which re-nests the block while targeted tests stay green.
+- **Fixes:** `shell/truncate-before-read` no longer fires on `git show HEAD:X > X` or `echo a > a` (the two real
+  false positives); the `git stash -u` escape of `worktree-add-dirty` and `discards-uncommitted` stops at a
+  newline; a `# wys:allow` marker counts only in a real comment, not inside a commit message; `test` exits 1
+  when a check crashes instead of printing "clean".
+- Tests: 279 pass, plus a 16-mutation matrix (each safeguard removed alone turns its test red) and a suite-wide
+  tripwire that fails the run if the real `~/.gitconfig` changes.
+
 ## [0.5.0] - 2026-10-29
 
 - **New rule `git/discards-uncommitted` (block).** `git checkout -- <path>` restores the worktree from the

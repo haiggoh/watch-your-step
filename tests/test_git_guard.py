@@ -411,3 +411,14 @@ def test_an_uninstalled_guard_survives_a_plugin_update_untouched(own_global):
     before = own_global.read_text()
     assert wys.git_guard("ensure", "/cache/0.6.1/bin/watch-your-step.py") == (0, "")
     assert own_global.read_text() == before
+
+
+def test_status_says_when_git_cannot_host_the_guard(own_global, tmp_path, monkeypatch):
+    import os
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    (fake / "git").write_text("#!/bin/sh\nexit 0\n")
+    (fake / "git").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake}:{os.environ['PATH']}")
+    code, out = wys.git_guard("status", SCRIPT)
+    assert code == 0 and "no config-based hooks" in out

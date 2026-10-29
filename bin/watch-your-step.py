@@ -8,17 +8,28 @@ Usage:
   watch-your-step.py test [--tool T] [--shell S] COMMAND
                                                  try a command by hand and print every rule it trips
   watch-your-step.py rules                       list the rules and their severity
+  watch-your-step.py git-guard ensure|install|uninstall|status
+                                                 the git-level branch guard: ensure (run at session
+                                                 start) installs/refreshes it in the GLOBAL git config
+                                                 unless uninstalled; uninstall disables it for good
+  watch-your-step.py git-hook ref <phase> | push <remote> <url>
+                                                 what git's reference-transaction / pre-push hooks run
   watch-your-step.py -h | --help                 this help
 
 Override one rule on one command, visibly: end the command with  # wys:allow <rule-id>[,<rule-id>]
+(only in a real comment — inside a commit message or a heredoc body the marker is plain text).
 
 Environment:
   WATCH_YOUR_STEP_DISABLE   comma-separated rule ids to skip everywhere, or "all"
   WATCH_YOUR_STEP_SHELL     shell the rules assume (default: basename of $SHELL)
   WATCH_YOUR_STEP_USER      user name the home-path rule compares against (default: the login user)
   WATCH_YOUR_STEP_RULES     path to an alternative rules.json
+  WYS_ALLOW_BRANCH_DELETE=1 a deliberate branch deletion: the git guard and the branch-delete rule
+                            let it through (or: git -c hook.wys-branch-guard.enabled=false …)
+  CLAUDECODE                the git guard acts only when this is set (Claude Code sets it)
 
 The hook FAILS OPEN: any internal error lets the tool call through and is reported on stderr.
+`test` does not: a check that crashes makes it exit 1, so a probe never vouches for an unjudged command.
 """
 import getpass
 import glob
@@ -1147,6 +1158,8 @@ def git_guard(action, script=None):
             lines.append(f"{event}: " + (p.stdout.strip().replace("\n", "; ") or "(no hooks)"))
             lines.append(f"  {names[kind]}.enabled = {_gcfg(names[kind] + '.enabled') or 'unset (on)'}")
         lines.append(f"  script: {script} ({'present' if os.path.isfile(script) else 'MISSING'})")
+        if not _config_hooks_supported():
+            lines.append("  this git has no config-based hooks (hook.<name>.command): the guard cannot run here")
         return 0, "\n".join(lines) + "\n"
     if action == "uninstall":
         for kind in GUARD_NAMES:

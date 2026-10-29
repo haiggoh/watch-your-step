@@ -151,3 +151,35 @@ edits) and `git clean -f` (untracked files; `-x` adds ignored ones). The rule re
 the command's own cwd (following `cd X` and `git -C X`), so a clean path, an untracked pathspec (git errors
 on those rather than losing them), an index-only `restore --staged` (the worktree copy keeps the work), a
 same-command `git stash -u`, quoted or variable pathspecs, and cache-only noise all stay silent.
+
+## tool/read-pages-non-pdf
+
+`Read`'s `pages` parameter pages a PDF and nothing else. On a text file it is **silently ignored**: the call
+succeeds and returns the file from line 1 again. In the echoprism Phase 5 session (2026-10-25) a `.tsx` file
+was "paged" with `pages: 1`, `2`, `3` six times in one turn, each call returning lines 1-55 while looking like
+progress. The misreading had a cause: `pages: "0"` fails with a real validation error, which proves the
+parameter exists, and was generalised into "it works on text files too". A memory describing exactly this
+trap was loaded the whole time, which is why it became a rule: the reminder existed and did not stop it.
+
+## tool/edit-anchor-mid-indent
+
+An `Edit`'s `old_string` with 8 leading spaces matched **inside** a 12-space line (2026-10-28, the waypoints
+repo-category session). The replacement kept the line's extra 4 spaces, which moved a block out of its `if`,
+and the targeted tests stayed green; only Pyright and the full suite caught it. The rule fires only on that
+signature: an indentation-led anchor preceded by whitespace-only characters on its line. A substring replaced
+inside a line of code, an anchor at line start, and an anchor that starts with a newline all pass.
+
+## The git guard (hook.wys-branch-guard, hook.wys-push-guard)
+
+`git/branch-delete-unrecoverable` judges the command line an agent types, and a re-measurement on 0.5.0
+(2026-10-28/29) found that most real shapes slip past it: a quoted name, a second name, `bash -c "…"`,
+`B=x; git branch -D $B`, `$(…)`, `git update-ref -d refs/heads/x`, a Python subprocess, `git -c k=v branch -D`.
+Its push-delete half had never fired at all. The structural fix is git's own `reference-transaction` hook,
+which every ref deletion passes through, whatever started it. Two measured traps shaped the hook:
+
+- **Git appends `"$@"` to a one-line hook command.** A safety one-liner ending in `exit 0` therefore ran as
+  `exit 0 prepared`, failed with "too many arguments", and git **aborted an ordinary commit**: a guard built
+  to fail open failed closed on the most common operation there is. The installed one-liner ends in `true`.
+- **`git branch -m` deletes the old ref before it creates the new one.** At the moment the hook can still
+  refuse, the new name does not exist, so the refs alone cannot tell a rename from a loss. The argv of the
+  git process running the hook can.

@@ -41,6 +41,9 @@ is command substitution: the code span is replaced by the output of running it, 
 | `git/stash-untracked` | warn | a bare `git stash` (no `-u` / `-a`) with untracked files present: they are not stashed, and a later clean or checkout can destroy them |
 | `zsh/unquoted-var-arglist` | warn (zsh) | `cmd $files 2>/dev/null`: zsh passes the whole list as ONE argument, and the failure reads as a clean empty result |
 | `git/discards-uncommitted` | block | `git checkout`/`git restore` on paths carrying uncommitted edits (the `<rev> --` form counts staged-only too), a forced switch (`checkout -f`, `switch --discard-changes`), `git reset --hard` with tracked edits, or `git clean -f` with untracked files — when uncommitted work would actually be lost |
+| `git/branch-delete-unrecoverable` | block | `git branch -d/-D` (every name, quoted or not, through `-C`/`-c` options) or `git push <remote> --delete`/`:<name>` when the branch's commits would be reachable from no other ref, and deleting `main`/`master` |
+| `tool/read-pages-non-pdf` | block | a `Read` with `pages` on a file that is not a PDF: `pages` is ignored there and the call silently returns line 1 again |
+| `tool/edit-anchor-mid-indent` | block | an `Edit`/`MultiEdit` whose `old_string` starts with indentation but matches inside a deeper-indented line, which silently re-nests the block |
 
 The `git/` rules and `zsh/unmatched-glob` are **state-aware**: instead of matching text, they look at the
 repository or the filesystem at hook time (the staged diff, the worktree's ignored files, the checkout's dirty
@@ -66,7 +69,37 @@ in both, the text is literal. A `$( … )` inside double quotes is parsed as its
   transcript, so a reader can see what was waved through.
 - Everywhere (temporary): `WATCH_YOUR_STEP_DISABLE=<rule-id>,…` or `all`.
 - The hook **fails open**: if it crashes, the call goes through and the error goes to stderr. A bug in
-  this plugin must never stall a session.
+  this plugin must never stall a session. (`watch-your-step.py test` is the exception: a probe that
+  hid a crashing check would vouch for a command it never judged, so there it exits 1 and says so.)
+- The marker counts only in a real comment: inside a commit message or a heredoc body it is text.
+
+## The git guard (since 0.6.0)
+
+A PreToolUse hook only sees the command line an agent **types**. A branch deletion can also come from a
+`$VAR`, `bash -c`, `git update-ref -d`, a script, or a Python subprocess, and none of those reach it. Git
+itself has one step every route passes through: the **reference transaction**. So watch-your-step also
+installs two of git's own hooks:
+
+| git hook | name in `~/.gitconfig` | refuses |
+|---|---|---|
+| `reference-transaction` | `hook.wys-branch-guard` | deleting a local branch whose commits no other branch, tag or remote-tracking ref holds (renames pass) |
+| `pre-push` | `hook.wys-push-guard` | deleting a remote branch whose commits exist nowhere else in the repo, or a remote `main`/`master` |
+
+- **Installed automatically, and announced.** At session start, `watch-your-step.py git-guard ensure` adds these
+  keys to your **global** git config (and only these) and prints one line saying so. They are git's own
+  config-based hooks, so they add to a repository's `.git/hooks` and never replace them. See them in git's own view:
+  `git hook list --show-scope reference-transaction`.
+- **Only under Claude.** The hooks act only when git runs under a Claude Code session (`CLAUDECODE` is set).
+  Your own `git branch -D` in a plain terminal behaves exactly as before.
+- **Deliberate deletion, both ways:** `git -c hook.wys-branch-guard.enabled=false branch -D <b>`
+  (pre-push: `hook.wys-push-guard`), or `WYS_ALLOW_BRANCH_DELETE=1 git …`. The refusal prints both with your branch name.
+- **Off for good:** `watch-your-step.py git-guard uninstall` sets `hook.wys-*-guard.enabled=false`, and from then on
+  session starts leave the keys alone (`git hook list` shows them as `disabled`). `git-guard install` turns them back
+  on, and `git-guard status` shows the current state.
+- **Cost:** outside Claude, one shell test per ref update. Inside Claude, Python starts only for a branch deletion.
+  Measured on git 2.56: 9 ms per ref transaction with no guard, 25 ms with the guard outside Claude, and 63 ms in a
+  mix of half creations and half deletions inside Claude. **Fails open:** a missing script, or any error, lets git through.
+- Needs a git with config-based hooks (`hook.<name>.command`); on an older git, `ensure` does nothing and `status` says so.
 
 ## Install
 
