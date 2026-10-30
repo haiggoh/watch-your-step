@@ -1,3 +1,13 @@
+## [0.7.1] - 2026-10-31
+
+- **Fix `path/home-typo` false positive on project-dir arguments**: the `-Users-…` capture class was missing
+  the `$ ; : )` exclusions the `/Users-…` alternative has, so a trailing `$` in an arg like
+  `--project "<project-dir>$"` was captured INTO the name, which then neither equalled the login user nor
+  existed as a directory — a false BLOCK on a legitimate `~/.claude/projects/` dir name (caught live
+  2026-10-30 when an `audit-scan --project "<project-dir>$"` call was denied). Regression cases added:
+  should-pass for the own-user-`$` arg (mutation-verified red with the old class) and should-flag for a
+  near-miss user-`$` arg, so typo detection is unchanged. Suite 308/308.
+
 ## [0.7.0] - 2026-10-29
 
 - **Three new warning rules, migrated out of always-on memory** (the lesson stays in `docs/incidents.md`, the

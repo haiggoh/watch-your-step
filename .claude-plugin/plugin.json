@@ -1,6 +1,6 @@
 {
   "name": "watch-your-step",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "🥾 Catches command traps BEFORE a tool call runs: a backtick or $40 inside double quotes, a mistyped home directory, a file truncated before it is read, zsh's '====' abort, a bare glob that matches nothing, bash-isms under zsh, a commit that would record conflict markers, a worktree removal that would destroy ignored files, a worktree created from a dirty checkout, ps/pgrep output that would print full process arguments, a stash that silently skips untracked files, an unquoted $var argument list that reads as an empty result, a branch deletion whose commits would vanish, a git checkout/restore/reset --hard/clean -f that would discard uncommitted changes, a Read with pages on a non-PDF, an Edit anchor matching mid-indent, a headless claude -p that would load every MCP server, git add -A, and an NR==1 awk in a batched find. Since 0.6.0 a git-level guard (git's own reference-transaction and pre-push hooks, auto-installed in the global git config and active only under Claude) also refuses an unrecoverable branch deletion by ANY route — scripts, $VAR, update-ref -d, subprocesses. Rules are data with tests; silent-corruption traps are blocked with the exact fix, the rest are warnings, and one visible '# wys:allow <rule>' overrides a single command.",
   "author": { "name": "Heiko Brantsch" },
   "homepage": "https://github.com/haiggoh/watch-your-step",
