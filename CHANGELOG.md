@@ -9,6 +9,10 @@
   in throwaway `mktemp` repos, so it is a warning with a documented `# wys:allow git/add-all`.
 - Not migrated: a `python3 <script>` whose shebang names another interpreter needs a file read, which the
   pattern engine has no check for yet.
+- Docs addendum (commit 4849983, earlier the same day, docs-only): the README h1 carries the
+  About-verbatim pair 🛘🥾 per the branding plan's stated default (plugin.json keeps single 🥾
+  for stability — that divergence is by design, not drift). Recorded here rather than in its own
+  release entry — no version bump.
 - Tests: 306 pass.
 
 ## [0.6.0] - 2026-10-29
