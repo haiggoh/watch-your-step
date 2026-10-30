@@ -34,6 +34,8 @@
     {"rule": "path/home-typo", "expect": "pass", "tool": "Read", "file_path": "/Users/HOMEUSER/.claude/CLAUDE.md"},
     {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/Shared/x"},
     {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "cat ~/.claude/projects/-Users-HOMEUSER-ClaudeWorkspace-echoprism/x.jsonl"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "audit-scan.py --project \"-Users-HOMEUSER$\" --lessons"},
+    {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "audit-scan.py --project \"-Users-OTHERUSER$\" --lessons"},
 
     {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "sed 's/a/b/' config.txt > config.txt"},
     {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "cat notes.md | grep -v x > notes.md"},
