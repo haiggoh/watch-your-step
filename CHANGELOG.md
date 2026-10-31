@@ -1,3 +1,12 @@
+## [0.7.3] — 2026-10-31
+
+### Fixed
+- **`path/home-typo` no longer fires on a bare `-Users-<name>` slug in data**: the slug alternative now
+  matches only where the slug is resolved as a path — under `projects/`, or as a `--project` value. A slug
+  inside a test-fixture string or prose (e.g. `fixture = "-Users-me-proj"`) used to be read as a foreign
+  home directory and BLOCKED. Two regression pass-cases added; the `--project "-Users-<other>$"` flag case
+  still fires.
+
 ## [0.7.2] — 2026-10-31
 
 ### Changed
