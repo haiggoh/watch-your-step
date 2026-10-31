@@ -5,5 +5,6 @@
   "changelog": "CHANGELOG.md",
   "refresh_plugin": "watch-your-step",
   "default_branch": "main",
-  "test_cmd": "bash tests/test_version_consistency.sh && \"$HOME/.local/bin/pytest\" -q tests -p no:cacheprovider -n 12"
+  "test_cmd": "bash tests/test_version_consistency.sh && \"$HOME/.local/bin/pytest\" -q tests -p no:cacheprovider -n 12",
+  "require_default_branch_checkout": true
 }

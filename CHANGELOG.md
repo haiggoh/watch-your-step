@@ -1,3 +1,9 @@
+## [0.7.2] — 2026-10-31
+
+### Changed
+- The plugin description (plugin.json, and the marketplace listing it feeds) is rewritten to describe
+  the plugin's full current capabilities.
+
 ## [0.7.1] - 2026-10-31
 
 - **Fix `path/home-typo` false positive on project-dir arguments**: the `-Users-…` capture class was missing
