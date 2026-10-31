@@ -30,6 +30,8 @@
     {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "ls /Users/OTHERUSER/ClaudeWorkspace/cost-tracker"},
     {"rule": "path/home-typo", "expect": "flag", "tool": "Read", "file_path": "/Users/OTHERUSER/.claude/projects/x/memory/a.md"},
     {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "cat ~/.claude/projects/-Users-OTHERUSER/memory/a.md"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "python3 -c 'fixture = \"-Users-me-proj\"'"},
+    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "waypoints.py add \"note about the -Users-me-proj fixture slug\""},
     {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/HOMEUSER/ClaudeWorkspace ~/x $HOME/y"},
     {"rule": "path/home-typo", "expect": "pass", "tool": "Read", "file_path": "/Users/HOMEUSER/.claude/CLAUDE.md"},
     {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/Shared/x"},

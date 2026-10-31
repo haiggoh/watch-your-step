@@ -233,8 +233,12 @@ def check_home_typo(texts, user, **_):
     for text in texts:
         # both alternatives must exclude the same shell metacharacters: the -Users- form
         # names a project dir under ~/.claude/projects/, so a trailing $ (regex anchor in an
-        # arg like --project "-Users-<user>$") used to be captured INTO the name and false-fired
-        for m in re.finditer(r"/Users/([^/\s\"'`$;:)]+)|-Users-([^-/\s\"'`$;:)]+)", text):
+        # arg like --project "-Users-<user>$") used to be captured INTO the name and false-fired.
+        # The slug form only counts where it is resolved as a path: under projects/, or as a
+        # --project value. A bare "-Users-x" in a test fixture or prose used to false-fire too
+        for m in re.finditer(r"/Users/([^/\s\"'`$;:)]+)"
+                             r"|(?:(?<=projects/)|(?<=--project )|(?<=--project \")|(?<=--project=))"
+                             r"-Users-([^-/\s\"'`$;:)]+)", text):
             name = m.group(1) or m.group(2)
             if name != user and not os.path.isdir("/Users/" + name):
                 return True

@@ -1,6 +1,6 @@
 {
   "name": "watch-your-step",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "🛘🥾 A PreToolUse hook that checks each command before it runs. Silent-corruption traps — backticks in double quotes, commits with conflict markers, discarded uncommitted work, unrecoverable branch deletions — are blocked with the exact fix; risky habits like git add -A only warn. A git-level guard also refuses unrecoverable branch deletions by any route. Override a rule once: # wys:allow <rule>.",
   "author": { "name": "Heiko Brantsch" },
   "homepage": "https://github.com/haiggoh/watch-your-step",
