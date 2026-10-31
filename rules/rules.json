@@ -119,6 +119,22 @@
       "incident": "2026-10-16"
     },
     {
+      "id": "shell/python-shebang-mismatch",
+      "severity": "block",
+      "stateful": true,
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "check": "python_shebang_mismatch",
+      "message": "python3 is about to run this file, but the file's own first line (#!...) names a DIFFERENT interpreter — as typed the command cannot succeed and fails with that interpreter's error, which reads like a bug in the file (measured: a #!/bin/sh .py shim gave a misleading SyntaxError under python3).",
+      "fix": "run the file directly (./script or its absolute path) so the shebang picks the interpreter, or invoke the file's real interpreter explicitly",
+      "incident": "2026-10-31"
+    },
+    {
       "id": "zsh/unquoted-var-for",
       "severity": "warn",
       "tools": [

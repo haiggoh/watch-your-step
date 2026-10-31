@@ -15,7 +15,8 @@ RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
 TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored", "git/worktree-add-dirty",
           "git/stash-untracked", "git/branch-delete-unrecoverable", "git/discards-uncommitted"}
 TESTED_ELSEWHERE = {"zsh/unmatched-glob",            # proven in tests/test_unmatched_glob.py
-                    "tool/edit-anchor-mid-indent"}   # proven in tests/test_tool_rules.py
+                    "tool/edit-anchor-mid-indent",   # proven in tests/test_tool_rules.py
+                    "shell/python-shebang-mismatch"} # proven in tests/test_shebang_rule.py
 MARKED = "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n"
 
 
@@ -760,3 +761,36 @@ def test_mutation_discards_check_is_what_fires(repo, monkeypatch):
     (repo / "ok.txt").write_text("changed\n")
     monkeypatch.setitem(wys.CHECKS, "discards_uncommitted", lambda *a, **k: False)
     assert not fired("git checkout -- ok.txt", repo, DISCARD_RULE)
+
+
+# --- 0.8.0: the five test pins deferred from the 0.6.0 final review (waypoint
+# --- watch-your-step-5-deferred) — behaviour was already correct, the pins were missing ---
+
+def test_branch_delete_of_unresolvable_names_gives_no_verdict(origin_repo):
+    """A $VAR or backtick name is not a concrete branch: _resolvable covers both, so the
+    rule must NOT fire on them (a guess here would false-deny a real deletion)."""
+    assert not fired('git branch -D "$VAR"', origin_repo, RULE)
+    assert not fired("git branch -D `echo topic`", origin_repo, RULE)
+
+
+def test_branch_delete_honours_trailing_wys_allow_comment(origin_repo):
+    """The override marker works in a trailing comment on the branch-delete command itself."""
+    assert not fired("git branch -D topic  # wys:allow git/branch-delete-unrecoverable",
+                     origin_repo, RULE)
+
+
+def test_ls_remote_timeout_fails_open(origin_repo, monkeypatch):
+    """git() raising TimeoutExpired must read as NO verdict, never as a fired rule — the
+    hook's try/except fails open, so pin that seam directly. The ls-remote path is the
+    push-delete branch, so the probe must use `git push --delete`, not a local -D."""
+    import subprocess as sp
+    real = wys.git
+
+    def timeout_on_ls_remote(args, cwd, **kw):
+        if args and args[0] == "ls-remote":
+            raise sp.TimeoutExpired(cmd="git", timeout=3)
+        return real(args, cwd, **kw)
+
+    monkeypatch.setattr(wys, "git", timeout_on_ls_remote)
+    sh(origin_repo, "push", "-q", "origin", "topic")
+    assert not fired("git push origin --delete topic", origin_repo, RULE)

@@ -451,3 +451,17 @@ def test_ref_with_a_detached_head_is_silent_for_held_and_missing_branches(guarde
     sh(guarded, "switch", "-q", "--detach", "lonely")
     assert wys.git_hook_ref("prepared", [f"{Z} {Z} refs/heads/merged"], str(guarded))[0] == 0
     assert wys.git_hook_ref("prepared", [f"{Z} {Z} refs/heads/no-such"], str(guarded))[0] == 0
+
+
+def test_pre_push_e2e_with_env_override_allows_the_delete(guarded, monkeypatch):
+    """0.8.0 deferred pin: the WYS_ALLOW_BRANCH_DELETE=1 escape works end to end through the
+    git-hook WRAPPER (cmd_git_hook, the layer that reads the env), not just git_hook_push."""
+    sh(guarded, "push", "-q", "origin", "lonely")
+    tip = rev(guarded, "lonely")
+    sh(guarded, "branch", "-D", "lonely")
+    sh(guarded, "fetch", "-q", "origin")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setenv("WYS_ALLOW_BRANCH_DELETE", "1")
+    stdin = f"(delete) {Z} refs/heads/lonely {tip}\n"
+    code = wys.cmd_git_hook(["push", "origin", "unused"], stdin, str(guarded))
+    assert code == 0, "the env override must allow the remote-only delete through the wrapper"

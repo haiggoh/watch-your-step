@@ -32,6 +32,7 @@ is command substitution: the code span is replaced by the output of running it, 
 | `shell/dollar-digit-in-dquote` | warn | `"$40"`, `"$0"` in quoted prose |
 | `zsh/pipestatus` | warn (zsh) | `${PIPESTATUS[0]}`, which is always empty under zsh |
 | `shell/grep-F-anchor` | warn | `grep -F '^…'`, which can never match |
+| `shell/python-shebang-mismatch` | block | `python3 <file>` whose own first line (`#!…`) names a different interpreter — the command cannot succeed as typed and fails with a misleading error from the wrong interpreter |
 | `zsh/unquoted-var-for` | warn (zsh) | `for f in $files`: zsh doesn't word-split it |
 | `git/staged-conflict-markers` | block | a commit or `rebase/merge/cherry-pick --continue` that would record `<<<<<<<` / `>>>>>>>` lines, including files named by a `git add` earlier in the same command |
 | `git/worktree-remove-ignored` | warn | `git worktree remove` on a worktree holding gitignored files that aren't caches, which removal deletes for good |

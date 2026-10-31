@@ -1,3 +1,21 @@
+## [0.8.0] — 2026-10-31
+
+### Added — shebang rule `shell/python-shebang-mismatch` (block)
+
+- `python3 <file>` where the file's own first line names a DIFFERENT interpreter is blocked
+  with the exact fix (run the file directly so the shebang picks the interpreter). The verdict
+  needs a file read, so the check lives in the engine (`check_python_shebang_mismatch`), not a
+  pure pattern; `#!/usr/bin/env X` resolves through env; missing/unreadable files and `-c`/`-m`
+  flags give NO verdict (fail open). Proven in tests/test_shebang_rule.py (11 tests,
+  mutation-checked; live-fired via the `test` subcommand). Measured incident: a #!/bin/sh .py
+  shim gave a misleading SyntaxError under python3.
+
+### Tests — the 5 pins deferred from the 0.6.0 final review (waypoint watch-your-step-5-deferred)
+
+- unresolvable names (`$VAR`, backtick) give no verdict; trailing `# wys:allow` pass case on
+  branch-delete; ls-remote TimeoutExpired fails open (via the push-delete path);
+  WYS_ALLOW_BRANCH_DELETE=1 e2e through the git-hook wrapper; evaluate overhead < 0.5 s/call.
+
 ## [0.7.3] — 2026-10-31
 
 ### Fixed

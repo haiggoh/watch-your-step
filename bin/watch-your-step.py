@@ -276,6 +276,57 @@ def check_equals_word(texts, **_):
     return False
 
 
+PY_RUN = re.compile(r"^python3?(?:\.\d+)?$")
+SHEBANG = re.compile(r"^#!\s*(\S+)")
+
+
+def _shebang_interpreter(path, cwd):
+    """The interpreter a file's shebang names, or '' when it has none or cannot be read.
+    Fail open: a missing/unreadable file gets NO verdict, never a guess."""
+    try:
+        p = os.path.expanduser(path)
+        if not os.path.isabs(p):
+            p = os.path.join(cwd or os.getcwd(), p)
+        if not os.path.isfile(p):
+            return ""
+        with open(p, "r", errors="replace") as f:
+            first = f.readline()
+    except OSError:
+        return ""
+    m = SHEBANG.match(first)
+    if not m:
+        return ""
+    words = first.split()
+    interp0 = os.path.basename(words[0].lstrip("#!"))
+    if interp0 == "env":
+        # `#!/usr/bin/env python3` names env, not python — take the token env runs
+        rest = [w for w in words[1:] if not w.startswith("-")]
+        return os.path.basename(rest[0]) if rest else ""
+    return interp0
+
+
+def check_python_shebang_mismatch(texts, bare_view, cwd=None, **_):
+    """`python3 <file>` where the file's own shebang names a DIFFERENT interpreter: as typed
+    the command cannot succeed (measured: a #!/bin/sh .py shim gave a misleading SyntaxError
+    under python3). A file read is required — a pure pattern cannot see the first line."""
+    for chain in re.split(r"&&|\|\||[;\n]", bare_view):
+        words = chain.split()
+        while words and (re.match(r"^\w+=", words[0]) or words[0] in ("sudo", "env")):
+            words = words[1:]
+        if not words or not PY_RUN.match(os.path.basename(words[0])):
+            continue
+        rest = words[1:]
+        i = 0
+        while i < len(rest) and rest[i].startswith("-"):
+            i += 1  # flags (-c CODE, -m MOD) never name the script file
+        if i >= len(rest) or rest[i].startswith("-"):
+            continue
+        interp = _shebang_interpreter(rest[i], cwd)
+        if interp and not interp.startswith("python"):
+            return True
+    return False
+
+
 # ---- state-aware git checks: they look at the repo itself, so they only fire when the trap is real --
 
 MARKER = re.compile(r"^(?:<{7}|>{7})(?: |$)", re.M)
@@ -968,6 +1019,7 @@ CHECKS = {
     "unquoted_var_arglist": check_unquoted_var_arglist,
     "branch_delete_unrecoverable": check_branch_delete_unrecoverable,
     "discards_uncommitted": check_discards_uncommitted,
+    "python_shebang_mismatch": check_python_shebang_mismatch,
 }
 
 
