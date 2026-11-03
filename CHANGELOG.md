@@ -1,3 +1,16 @@
+## [0.8.1] — 2026-11-03
+
+### Fixed — the git branch guard no longer misreads `git pack-refs` as a branch deletion
+
+- The reference-transaction hook now detects a `pack-refs` ancestor (shared `_git_ancestor_toks`
+  walk, like the rename detection) and skips the transaction: pack-refs deletes every LOOSE ref
+  in one transaction and re-creates it packed with the SAME value — a move, not a deletion.
+  Measured 2026-10-31 and again 2026-11-03 during an rtc ship cleanup: the guard refused during
+  pack-refs and its message pointed at force-deleting the named branch (waypoint
+  watch-your-step-the-git-level).
+- Regression tests: an e2e `git pack-refs --all` passes with the branch intact AND a real
+  `branch -D` of it still refuses afterwards; a unit test pins the pack-refs parent detection.
+  Both mutation-checked (disabling the detection turns them red). Full suite 328 passed.
 ## [0.8.0] — 2026-10-31
 
 ### Added — shebang rule `shell/python-shebang-mismatch` (block)

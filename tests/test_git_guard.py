@@ -380,6 +380,24 @@ def test_parent_detection_rejects_a_non_move(monkeypatch):
     assert wys._parent_is_branch_move() is False
 
 
+def test_e2e_pack_refs_is_never_read_as_branch_deletion(live):
+    """git pack-refs --all deletes every LOOSE ref in one transaction and re-creates it packed
+    with the SAME value — a move, not a deletion. Measured 2026-10-31 and again 2026-11-03
+    (rtc ship cleanup): the guard refused during pack-refs and its message pointed at
+    force-deleting the branch. (waypoint watch-your-step-the-git-level)"""
+    assert g(live, "pack-refs", "--all").returncode == 0
+    assert exists(live, "lonely") and rev(live, "lonely")
+    # the guard still refuses a REAL deletion of the same branch afterwards
+    assert g(live, "branch", "-D", "lonely").returncode != 0 and exists(live, "lonely")
+
+
+def test_parent_detection_recognizes_pack_refs(monkeypatch):
+    monkeypatch.setattr(wys, "_ps_toks", lambda pid: ("123", ["git", "pack-refs", "--all"]))
+    assert wys._parent_is_pack_refs() is True
+    monkeypatch.setattr(wys, "_ps_toks", lambda pid: ("123", ["git", "-c", "a=b", "branch", "-D", "x"]))
+    assert wys._parent_is_pack_refs() is False
+
+
 def test_session_start_runs_ensure():
     import json
     hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]

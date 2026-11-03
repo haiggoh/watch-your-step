@@ -1042,6 +1042,38 @@ def _refusal(what, why, native, env):
             f"    {native}\n    {env}\n")
 
 
+def _ps_toks(pid):
+    """(ppid, argv tokens) of pid from ps, or None when ps cannot answer. Shared by the
+    parent-git-ancestor detectors below (monkeypatchable in tests)."""
+    import subprocess
+    try:
+        p = subprocess.run(["ps", "-o", "ppid=,args=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    f = p.stdout.split()
+    if len(f) < 2:
+        return None
+    return f[0], f[1:]
+
+
+def _git_ancestor_toks():
+    """argv tokens of the first `git` ancestor of this process (4 levels up), or None. The hook
+    process sits under the one-liner's sh, which sits under that git."""
+    pid = os.getppid()
+    for _ in range(4):
+        r = _ps_toks(pid)
+        if r is None:
+            return None
+        ppid, toks = r
+        if toks and os.path.basename(toks[0]) == "git":
+            return toks
+        if not ppid.isdigit() or int(ppid) <= 1:
+            return None
+        pid = int(ppid)
+    return None
+
+
 def _parent_is_branch_move():
     """True when the git process that opened this transaction is `git branch -m/-M/--move`.
 
@@ -1051,35 +1083,30 @@ def _parent_is_branch_move():
     ancestor (python sits under the one-liner's sh, which sits under that git). A move never loses
     commits. When ps cannot answer, or no git ancestor is found in 4 levels: False — a refusal,
     overridable."""
-    import subprocess
-    pid = os.getppid()
-    for _ in range(4):
-        try:
-            p = subprocess.run(["ps", "-o", "ppid=,args=", "-p", str(pid)],
-                               capture_output=True, text=True, timeout=2)
-        except (OSError, subprocess.SubprocessError):
-            return False
-        f = p.stdout.split()
-        if len(f) < 2:
-            return False
-        ppid, toks = f[0], f[1:]
-        if os.path.basename(toks[0]) == "git":
-            if "branch" not in toks:
-                return False
-            after = toks[toks.index("branch") + 1:]
-            return any(t in ("-m", "-M", "--move") or re.fullmatch(r"-[a-zA-Z]*[mM][a-zA-Z]*", t)
-                       for t in after)
-        if not ppid.isdigit() or int(ppid) <= 1:
-            return False
-        pid = int(ppid)
-    return False
+    toks = _git_ancestor_toks()
+    if toks is None or "branch" not in toks:
+        return False
+    after = toks[toks.index("branch") + 1:]
+    return any(t in ("-m", "-M", "--move") or re.fullmatch(r"-[a-zA-Z]*[mM][a-zA-Z]*", t)
+               for t in after)
 
 
-def git_hook_ref(phase, lines, d, renaming=False):
+def _parent_is_pack_refs():
+    """True when the git ancestor runs `pack-refs`: it deletes every LOOSE ref in one transaction
+    and re-creates it packed with the SAME value — a ref moving from loose to packed is not a
+    deletion. Measured 2026-10-31 and again 2026-11-03 (rtc ship cleanup): the guard refused
+    during pack-refs and its message pointed at force-deleting the branch (waypoint
+    watch-your-step-the-git-level)."""
+    toks = _git_ancestor_toks()
+    return bool(toks) and "pack-refs" in toks
+
+
+def git_hook_ref(phase, lines, d, renaming=False, packing=False):
     """(exit code, message) for one reference-transaction call. Only `prepared` can refuse: the
     refs are locked and the transaction can still be aborted there, never after it. `renaming`:
-    the transaction belongs to a `git branch -m` (see _parent_is_branch_move)."""
-    if phase != "prepared" or renaming:
+    the transaction belongs to a `git branch -m` (see _parent_is_branch_move). `packing`: it
+    belongs to `git pack-refs` (see _parent_is_pack_refs) — same-value loose->packed moves."""
+    if phase != "prepared" or renaming or packing:
         return 0, ""
     deletions, holders = [], set()
     for ln in lines:
@@ -1141,7 +1168,8 @@ def cmd_git_hook(args, stdin_text, cwd):
             deleting = args[1] == "prepared" and any(
                 len(f) >= 3 and _is_zero(f[1]) and f[2].startswith("refs/heads/")
                 for f in (ln.split() for ln in lines))
-            code, msg = git_hook_ref(args[1], lines, cwd, renaming=deleting and _parent_is_branch_move())
+            code, msg = git_hook_ref(args[1], lines, cwd, renaming=deleting and _parent_is_branch_move(),
+                                     packing=deleting and _parent_is_pack_refs())
         elif args[:1] == ["push"] and len(args) >= 2:
             code, msg = git_hook_push(args[1], lines, cwd)
         else:
