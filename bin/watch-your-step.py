@@ -611,16 +611,57 @@ def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, lit_view=None,
     return False
 
 
-# ---- stateful zsh check: a glob that matches nothing aborts the whole command line ----
+# ---- stateful zsh check: a glob that matches nothing aborts the command (and its pipeline) ----
 
 GLOB_WORD = re.compile(r"[^\s;&|<>()\[\]{}\"'`]+")
 GLOB_QUALIFIED = re.compile(r"[^\s;&|<>()\[\]{}\"'`]*[*?][^\s;&|<>()\[\]{}\"'`]*\([A-Za-z,]+\)")
 BRACE_WORD = re.compile(r"\S*\{[^{}]*\}\S*")
 
+# Statements are separated by ; && || and newlines, NOT by a single | : pipeline stages start
+# together, so an earlier stage of the same pipeline creates nothing before the glob expands.
+STATEMENT_SEP = re.compile(r"&&|\|\||;|\n")
+# Words that introduce a command without being one.
+STATEMENT_LEAD = {"do", "then", "else", "elif", "if", "while", "until", "!", "{", "(", "time",
+                  "nocorrect", "command", "builtin"}
+# Words that open or close a block and run nothing themselves.
+STATEMENT_BLOCK = {"for", "select", "done", "fi", "esac", "}", ")", "in"}
+# Commands that create no files, so the filesystem the hook sees is the one the glob will see.
+READ_ONLY_COMMANDS = {"cd", "ls", "echo", "printf", "cat", "grep", "egrep", "head", "tail", "wc",
+                      "stat", "pwd", "true", "false", "test", "[", "sort", "uniq", "date", "which",
+                      "type", "file", "du", "df", "diff", "cmp", "sleep", "pgrep", "export", "find"}
+FIND_WRITES = re.compile(r"(^|\s)-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)\b")
+WRITE_REDIRECT = re.compile(r">>?(?!&)(?!\s*/dev/null)")
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _statement_may_write(stmt):
+    """True unless the statement is provably read-only. An unknown command counts as a writer:
+    a rule that cannot tell what ran earlier must give no verdict (the plugin fails open)."""
+    if WRITE_REDIRECT.search(stmt):
+        return True
+    words = stmt.split()
+    while words and (words[0] in STATEMENT_LEAD or ASSIGNMENT.match(words[0])):
+        words.pop(0)
+    if not words or words[0] in STATEMENT_BLOCK:
+        return False                       # empty, `for x in list`, `done`: no command ran
+    command = os.path.basename(words[0])
+    if command not in READ_ONLY_COMMANDS:
+        return True
+    return command == "find" and bool(FIND_WRITES.search(stmt))
+
+
+def _earlier_statements_may_write(prefix):
+    """True when a statement BEFORE the one holding the glob could have created files by the
+    time the glob expands. `prefix` is the command text up to the glob word."""
+    pieces = STATEMENT_SEP.split(prefix)
+    return any(_statement_may_write(p) for p in pieces[:-1])   # the last piece is the glob's own
+
 
 def check_unmatched_glob(texts, bare_view, cwd=None, **_):
-    """True when a bare glob would expand to nothing: zsh then refuses to run the command
-    at all ('no matches found'), so every stage of the line silently never executes."""
+    """True when a bare glob would expand to nothing: zsh then refuses to run that command
+    ('no matches found'), and with it every stage of the same pipeline. An earlier `;`-separated
+    statement has already run (measured), so it can also have created the files a later glob
+    needs: such a glob gets no verdict unless every earlier statement is provably read-only."""
     if not bare_view or ("*" not in bare_view and "?" not in bare_view):
         return False
     if re.search(r"\bsetopt\b[^\n;&|]*\bNULL_GLOB\b", bare_view) or re.match(r"\s*noglob\b", bare_view):
@@ -633,6 +674,8 @@ def check_unmatched_glob(texts, bare_view, cwd=None, **_):
         word = m.group(0)
         if ("*" not in word and "?" not in word) or re.search(r"[$Q`]", word):
             continue  # a quoted span or a variable inside the word makes the expansion unknowable
+        if _earlier_statements_may_write(view[: m.start()]):
+            continue  # an earlier statement may create these files before the glob expands
         d = resolve_dir(view[: m.start()], None, cwd)  # the command's own `cd X` moves the glob's base
         if d is None:
             continue

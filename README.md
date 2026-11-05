@@ -36,7 +36,7 @@ is command substitution: the code span is replaced by the output of running it, 
 | `zsh/unquoted-var-for` | warn (zsh) | `for f in $files`: zsh doesn't word-split it |
 | `git/staged-conflict-markers` | block | a commit or `rebase/merge/cherry-pick --continue` that would record `<<<<<<<` / `>>>>>>>` lines, including files named by a `git add` earlier in the same command |
 | `git/worktree-remove-ignored` | warn | `git worktree remove` on a worktree holding gitignored files that aren't caches, which removal deletes for good |
-| `zsh/unmatched-glob` | warn (zsh) | a bare glob matching nothing, which aborts the whole command line before anything runs |
+| `zsh/unmatched-glob` | warn (zsh) | a bare glob matching nothing, which aborts its command and the whole pipeline it sits in. A glob after an earlier statement that may create files (a script, a loop, a redirect, `mkdir`/`touch`) gets no verdict |
 | `git/worktree-add-dirty` | warn | `git worktree add` from a checkout with uncommitted files: the new tree starts from HEAD and they stay behind |
 | `secrets/ps-argv` | warn | `ps aux`/`ax` / `-ef` or `-e -f` / `-ww` / `-o args`/`command`/`cmd`, `pgrep -a` / `-fl` / `--list-full`: full process arguments can carry API keys into the transcript |
 | `git/stash-untracked` | warn | a bare `git stash` (no `-u` / `-a`) with untracked files present: they are not stashed, and a later clean or checkout can destroy them |

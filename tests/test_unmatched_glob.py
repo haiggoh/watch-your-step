@@ -88,3 +88,54 @@ def test_bash_shell_never_trips_the_zsh_rule(tmp_path):
     hits = wys.evaluate("Bash", {"command": "ls *.zzz-absent"}, shell="bash", user="t",
                         rules=RULES, cwd=str(tmp_path))
     assert "zsh/unmatched-glob" not in {h["id"] for h in hits}
+
+
+# ---- a glob in a LATER statement is judged when it runs, not when the hook looks ----
+# Real zsh (measured 2026-11-05): `echo A; ls nomatch*; echo C` runs A and C and only the
+# glob's own command fails, while `echo A | ls nomatch*` kills the whole pipeline. So an
+# earlier statement runs BEFORE a later glob is expanded and may create the files it needs.
+# False positives 2026-11-05 (both warned, neither command was affected):
+#   python3 digest.py --outdir D; grep -c x D/batch-*.txt     (a script writes the files)
+#   for i in 1 2 3; do ... > "task-$i.json"; done; ls task-*.json   (a loop writes them)
+
+def test_glob_over_files_a_script_creates_earlier_in_the_line_is_not_flagged(tmp_path):
+    out = tmp_path / "out"
+    assert not fired("python3 digest.py --outdir %s; grep -c x %s/batch-*.txt" % (out, out), tmp_path)
+
+
+def test_glob_over_files_a_loop_creates_earlier_in_the_line_is_not_flagged(tmp_path):
+    assert not fired('for i in 1 2 3; do echo x > "task-$i.json"; done; ls task-*.json', tmp_path)
+
+
+def test_glob_over_files_a_redirect_creates_earlier_in_the_line_is_not_flagged(tmp_path):
+    assert not fired("echo x > made.md && cat *.md", tmp_path)
+
+
+def test_glob_over_files_mkdir_touch_create_earlier_in_the_line_is_not_flagged(tmp_path):
+    assert not fired("mkdir out && touch out/a.md; cat out/*.md", tmp_path)
+
+
+def test_read_only_earlier_statements_still_let_a_later_absent_glob_warn(tmp_path):
+    # echo/ls/cd create nothing, so the hook's view of the filesystem is still the truth
+    assert fired("echo hi; ls *.zzz-absent", tmp_path)
+    assert fired("ls; pwd && cat *.zzz-absent", tmp_path)
+
+
+def test_first_statement_glob_warns_even_when_a_writer_follows_it(tmp_path):
+    # the glob is expanded BEFORE the later writer runs, so the later writer cannot rescue it
+    assert fired("ls *.zzz-absent; touch made.zzz-absent", tmp_path)
+
+
+def test_pipeline_stage_glob_warns_even_after_an_earlier_pipe_stage(tmp_path):
+    # pipeline stages start together: an earlier stage in the SAME pipeline creates nothing in time
+    assert fired("echo hi | cat *.zzz-absent", tmp_path)
+
+
+def test_unknown_earlier_command_gives_no_verdict(tmp_path):
+    # fail open: a command the rule cannot classify might write anything
+    assert not fired("some-unknown-tool --go; cat *.zzz-absent", tmp_path)
+
+
+def test_find_with_exec_counts_as_a_writer_but_plain_find_does_not(tmp_path):
+    assert not fired("find . -name x -exec touch {}.md \\; ; cat *.md", tmp_path)
+    assert fired("find . -name x; cat *.zzz-absent", tmp_path)
