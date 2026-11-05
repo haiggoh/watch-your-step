@@ -4,6 +4,13 @@ Each rule exists because the trap happened in real work, usually more than once,
 did not stop it. The common thread: **the command exited 0**, so nothing looked wrong until someone re-read
 the stored result.
 
+## Prevention: the session primer
+
+A hook catches the mistake; it does not stop it. So every rule also carries a one-line `primer` (imperative:
+what to do instead, <= 110 chars), injected once at session start by the `primer` SessionStart hook
+(`watch-your-step.py primer`), grouped by family. The PreToolUse guard remains the safety net for when the
+primer is not enough; `tests/test_primer.py` makes a rule without a primer fail the suite.
+
 ## shell/backtick-in-dquote
 
 A to-do bullet was written with a double-quoted argument containing a code span:

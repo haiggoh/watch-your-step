@@ -60,6 +60,16 @@ repositories). A mutation test proves that each flag case is caught by its own r
 the engine was replayed over 2,184 real tool calls from four working sessions: no false block, and it found a
 waypoint bullet that had silently lost a `` `claude -p` `` span (that command ran when the note was written).
 
+## Session primer
+
+Hooks load at session start, so a second SessionStart hook — `watch-your-step.py primer` — also runs there
+and injects every enabled rule's `primer` field once, grouped by family, one line each (about 2.1 KB), as
+`additionalContext`. The PreToolUse guard stays the safety net; the primer is prevention — the model reads
+the trap before it types the command, not after the hook fires. It honours the same knobs as the guard:
+`WATCH_YOUR_STEP_DISABLE=all` (or individual rule ids) silences it, `WATCH_YOUR_STEP_SHELL=bash` omits the
+`zsh/` rules, and it fails open — a corrupt rules file prints nothing and exits 0. A rule cannot ship
+without a `primer`: `tests/test_primer.py` fails the suite otherwise (and caps the total at 2,400 chars).
+
 ## How it reads a command
 
 It does **not** grep the raw command. A small shell tokenizer splits it into contexts (unquoted text, single
@@ -121,6 +131,7 @@ Hooks load when a session starts, so open a new session after installing.
 bin/watch-your-step.py test 'echo "run `make` first"'     # blocked
 bin/watch-your-step.py test "echo 'run \`make\` first'"   # clean
 bin/watch-your-step.py rules                              # list the rules
+bin/watch-your-step.py primer                             # the SessionStart injection, as JSON
 bin/watch-your-step.py --help
 ```
 

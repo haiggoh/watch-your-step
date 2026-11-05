@@ -23,7 +23,10 @@ adds a note. Every message names the rule, the fix and the incident that produce
 
 1. Add the rule to `rules/rules.json`: `id`, `severity` (block only when running the command is never what
    was meant, otherwise warn), `tools`, `shells`, `context`, `pattern` or a builtin `check`, `message`,
-   `fix`, `incident`.
+   `fix`, `primer`, `incident`. The `primer` is one imperative line (<= 110 chars) saying what to do
+   instead; the `primer` SessionStart hook injects it once at session start so the guard below stays a
+   safety net. `tests/test_primer.py` fails the suite when a rule ships without one (total budget 2,400
+   chars).
 2. Add at least one `flag` and one `pass` case to `tests/cases.json`, written from the real incident; the
    suite refuses a rule without both, and its mutation test proves each flag case is caught by its own rule.
 3. Replay real commands for false positives before shipping: run the engine over recent transcripts and
