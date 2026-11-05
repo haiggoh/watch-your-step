@@ -8,6 +8,8 @@ Usage:
   watch-your-step.py test [--tool T] [--shell S] COMMAND
                                                  try a command by hand and print every rule it trips
   watch-your-step.py rules                       list the rules and their severity
+  watch-your-step.py primer                      SessionStart hook mode: print every enabled rule's
+                                                 primer, one line each (nothing when disabled or "all")
   watch-your-step.py git-guard ensure|install|uninstall|status
                                                  the git-level branch guard: ensure (run at session
                                                  start) installs/refreshes it in the GLOBAL git config
@@ -50,7 +52,7 @@ ALLOW = re.compile(r"#\s*wys:allow\s+([\w/.,\- ]+)")
 
 
 DOC = __doc__ or ""
-USAGE = "usage: watch-your-step.py check | test [--tool T] [--shell S] COMMAND | rules | --help\n"
+USAGE = "usage: watch-your-step.py check | test [--tool T] [--shell S] COMMAND | rules | primer | --help\n"
 
 
 def usage(stream):
@@ -1469,6 +1471,49 @@ def cmd_rules():
     return 0
 
 
+def build_primer(rules, shell="zsh", disabled=()):
+    """The SessionStart injection: one line per enabled rule for this shell, grouped by prefix.
+
+    Returns "" when nothing applies (disabled == "all", every id disabled, or the shell
+    excludes all rules) so the hook prints nothing. A rule without a primer is skipped here;
+    tests/test_primer.py is the barrier that keeps one from shipping in rules.json."""
+    if isinstance(disabled, str):
+        disabled = {s.strip() for s in disabled.split(",") if s.strip()}
+    if "all" in disabled:
+        return ""
+    groups = {}
+    for r in rules:
+        if r["id"] in disabled:
+            continue
+        if r["shells"] and shell not in r["shells"]:
+            continue
+        primer = r.get("primer") or ""
+        if not primer:
+            continue
+        groups.setdefault(r["id"].split("/", 1)[0], []).append(primer)
+    if not groups:
+        return ""
+    lines = [f"{MARK} session primer — know these traps up front; the guard blocks them at call time:"]
+    for prefix in sorted(groups):
+        lines.append(f"{prefix}/")
+        lines.extend(f"  - {p}" for p in groups[prefix])
+    return "\n".join(lines)
+
+
+def cmd_primer():
+    try:
+        shell = os.environ.get("WATCH_YOUR_STEP_SHELL") or os.path.basename(os.environ.get("SHELL", "sh"))
+        text = build_primer(load_rules(), shell=shell, disabled=os.environ.get("WATCH_YOUR_STEP_DISABLE", ""))
+        if text:
+            sys.stdout.write(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": text,
+            }}, ensure_ascii=False))
+    except Exception as e:  # fail open: a primer must never stall a session start
+        sys.stderr.write(f"{MARK}: primer skipped ({type(e).__name__}: {e})\n")
+    return 0
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         (sys.stdout if argv else sys.stderr).write(DOC)
@@ -1480,6 +1525,15 @@ def main(argv):
         return cmd_test(rest)
     if cmd == "rules" and not rest:
         return cmd_rules()
+    if cmd == "primer":
+        if rest and rest[0] in ("-h", "--help"):
+            sys.stdout.write(DOC)
+            return 0
+        if rest:
+            sys.stderr.write(f"watch-your-step: unknown argument {rest[0]!r}\n")
+            usage(sys.stderr)
+            return 2
+        return cmd_primer()
     if cmd == "git-hook":
         return cmd_git_hook(rest, sys.stdin.read(), os.getcwd())
     if cmd == "git-guard":
