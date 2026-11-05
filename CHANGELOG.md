@@ -1,3 +1,21 @@
+## [0.8.2] — 2026-11-05
+
+### Fixed — `zsh/unmatched-glob` no longer warns about a glob over files an earlier statement creates
+
+- The rule judged every glob word against the filesystem at HOOK time, so a command line whose
+  earlier statement creates the files — `python3 digest.py --outdir D; grep -c x D/batch-*.txt`, or
+  a loop writing `task-$i.json` followed by `ls task-*.json` — warned although zsh expands the glob
+  only after that statement ran. Two false warnings in one session, 2026-11-05.
+- A glob in a LATER statement now gets a verdict only when every earlier statement is provably
+  read-only (a small allowlist: `cd ls echo cat grep find` without `-exec`/`-delete` …, no write
+  redirect). Any unknown command means no verdict — the plugin's fail-open rule. A glob in the first
+  statement, or in the same pipeline, is judged exactly as before.
+- Corrected the rule's message and README row: measured with real zsh, an unmatched glob aborts its
+  own command and the whole pipeline it sits in, while an earlier `;`-separated statement has
+  already run (the old text said "earlier … stages silently never execute").
+- Tests: 9 new cases in `tests/test_unmatched_glob.py` — 6 mutation-checked (red with the guard
+  neutralised), 3 pinning that the rule still warns. Full suite 337 passed.
+
 ## [0.8.1] — 2026-11-03
 
 ### Fixed — the git branch guard no longer misreads `git pack-refs` as a branch deletion
