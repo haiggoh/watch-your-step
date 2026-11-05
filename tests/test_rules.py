@@ -47,7 +47,7 @@ def test_rules_schema():
     assert len(ids) == len(set(ids)), "duplicate rule ids"
     for r in RULES:
         assert r["severity"] in ("block", "warn"), r["id"]
-        for key in ("tools", "shells", "context", "message", "fix", "incident"):
+        for key in ("tools", "shells", "context", "message", "fix", "primer", "incident"):
             assert key in r, f"{r['id']} lacks {key}"
         assert set(r["context"]) <= set(wys.CONTEXTS), r["id"]
         if "check" in r:

@@ -15,6 +15,7 @@
       "pattern": "`",
       "message": "a backtick inside a double-quoted string (or an unquoted <<EOF heredoc) is command substitution: the code span is replaced by the output of running it, and the command still exits 0.",
       "fix": "single-quote the prose, use a quoted heredoc (<<'EOF'), or escape each backtick as \\`",
+      "primer": "Never put a backtick inside double quotes; single-quote prose or use a quoted heredoc.",
       "incident": "2026-09-27, two waypoint bullets silently corrupted"
     },
     {
@@ -31,6 +32,7 @@
       "pattern": "\\$[0-9]",
       "message": "a literal like \"$40\" or \"$0\" inside double quotes is a positional parameter: it expands (usually to nothing) and the text changes silently.",
       "fix": "single-quote the text, or escape it as \\$40",
+      "primer": "Never write a literal $digit like $40 inside double quotes; single-quote the text.",
       "incident": "2026-09-27, a waypoint bullet lost its dollar amount"
     },
     {
@@ -51,6 +53,7 @@
       "check": "home_typo",
       "message": "this path names a home directory that is not yours. Models rebuild a path from token pieces each time they write it, so the user name can come out mistyped; the tool then reports a missing FILE, never a wrong DIRECTORY.",
       "fix": "write the path as ~/... (native file tools accept it) or $HOME/... in shell, never the expanded home directory",
+      "primer": "Never type the expanded home path; write ~/... or $HOME/... instead.",
       "incident": "2026-10-24, a free-lane session wrote two different misspellings of the user name in absolute paths"
     },
     {
@@ -66,6 +69,7 @@
       "check": "truncate_before_read",
       "message": "this command truncates a file before it reads it (`cmd f > f`, or python open(p, \"w\") ... open(p).read()): the shell or python empties the file first, so the read sees nothing and the file is destroyed while the command reports success.",
       "fix": "write to a temp file and move it over the original (preserving its mode), or edit in place with the Edit tool",
+      "primer": "Never redirect into the file being read (cmd f > f); write a temp file and move it, or Edit.",
       "incident": "file-rewrite trap, recorded in the shell one-liners memory"
     },
     {
@@ -83,6 +87,7 @@
       "check": "equals_word",
       "message": "in zsh an unquoted word starting with '=' (like ==== or ==) is EQUALS expansion: zsh looks it up as a command, fails with '=== not found', and aborts the REST of the command line.",
       "fix": "quote it ('====') or use a different separator such as '----'",
+      "primer": "In zsh a bare word starting with = aborts the line; quote it or use ---- as separator.",
       "incident": "2026-09-30, and again 2026-10-24: a probe's later stages never ran"
     },
     {
@@ -101,6 +106,7 @@
       "pattern": "PIPESTATUS",
       "message": "${PIPESTATUS[0]} is a bash-ism; the Bash tool here runs zsh, where it is empty, so an exit-status check built on it always passes.",
       "fix": "in zsh use $pipestatus[1] (lower case, 1-based), or run the pipeline under bash explicitly",
+      "primer": "This shell is zsh: PIPESTATUS is empty here; use $pipestatus[1] (1-based) or run bash.",
       "incident": "2026-10-19, memguard phase 4"
     },
     {
@@ -116,6 +122,7 @@
       "pattern": "grep\\s+(?:-[A-Za-z]*F[A-Za-z]*|--fixed-strings)(?:\\s+-\\S+)*\\s+['\"]?\\^",
       "message": "grep -F treats ^ as a literal character, so an anchored needle can never match and the search silently finds nothing.",
       "fix": "drop -F and escape the needle, or drop the ^ anchor",
+      "primer": "grep -F makes a ^ anchor literal and unmatchable; drop -F or drop the anchor.",
       "incident": "2026-10-16"
     },
     {
@@ -132,6 +139,7 @@
       "check": "python_shebang_mismatch",
       "message": "python3 is about to run this file, but the file's own first line (#!...) names a DIFFERENT interpreter — as typed the command cannot succeed and fails with that interpreter's error, which reads like a bug in the file (measured: a #!/bin/sh .py shim gave a misleading SyntaxError under python3).",
       "fix": "run the file directly (./script or its absolute path) so the shebang picks the interpreter, or invoke the file's real interpreter explicitly",
+      "primer": "Run a script by its own path so the shebang picks the interpreter, not python3 file.",
       "incident": "2026-10-31"
     },
     {
@@ -149,6 +157,7 @@
       "pattern": "\\bfor\\s+\\w+\\s+in\\s+\\$\\w+",
       "message": "zsh does NOT word-split an unquoted $var, so `for f in $files` runs ONCE with the whole list as one argument.",
       "fix": "use ${=files} or an array (files=(...); for f in $files), or read lines with ${(f)files}",
+      "primer": "zsh does not word-split $var: for f in $files runs once; use ${(f)files} or ${=files}.",
       "incident": "2026-10-16, free-agents release: a loop processed one 'file'"
     },
     {
@@ -165,6 +174,7 @@
       "check": "staged_conflict_markers",
       "message": "this commit / rebase --continue would record conflict markers (<<<<<<< or >>>>>>> lines) as the resolution: staging a still-conflicted file marks it resolved, git succeeds, and every later reader of the file gets garbage.",
       "fix": "resolve the markers in the file, re-stage it, and check with  git diff --cached --check  before continuing",
+      "primer": "Never stage a still-conflicted file; resolve, re-stage, git diff --cached --check.",
       "incident": "2026-10-14, a plugin manifest reached public main with conflict markers inside; every installer then saw the old version"
     },
     {
@@ -181,6 +191,7 @@
       "check": "worktree_remove_ignored",
       "message": "this worktree holds gitignored files (not caches) that `git worktree remove` deletes for good; 'clean and merged' hides them, because status --porcelain does not list ignored files.",
       "fix": "list them with  git -C <worktree> status --porcelain --ignored , compare each with history or the main checkout, and copy anything unique OUTSIDE the repo first",
+      "primer": "Before worktree remove: git status --porcelain --ignored; copy unique files out.",
       "incident": "2026-10-19, a removed worktree held the only copy of a plan's progress ledger"
     },
     {
@@ -199,6 +210,7 @@
       "check": "unmatched_glob",
       "message": "a bare glob that matches nothing ABORTS the command it belongs to and its whole pipeline: the only output is '(eval):N: no matches found', and the other stages of that pipeline silently never execute (an earlier ;-separated statement has already run).",
       "fix": "quote the pattern when the TOOL should expand it (find . -name '*.log', grep --include), add the (N) glob qualifier, or setopt NULL_GLOB in the same command",
+      "primer": "A bare glob matching nothing aborts its whole pipeline; quote it or add (N).",
       "incident": "2026-10-20, a find A /tmp/la-* probe was killed by its glob and the empty output nearly read as 'no logs exist'"
     },
     {
@@ -215,6 +227,7 @@
       "check": "worktree_add_dirty",
       "message": "git worktree add starts the new worktree from HEAD, not from the working tree: the source checkout's uncommitted files stay behind, and the new tree will not contain them.",
       "fix": "commit a WIP checkpoint in the source checkout first, or copy the paths across deliberately after the add",
+      "primer": "worktree add starts from HEAD, not the dirty tree; commit a WIP checkpoint first.",
       "incident": "2026-10-25, playbook-rules plan: the coverage grep found no hook guarding worktree-dirty while the standard workflow assumes clean sources"
     },
     {
@@ -230,6 +243,7 @@
       "check": "ps_argv",
       "message": "ps/pgrep output that includes full process arguments (aux/ax, -ef or -e -f, -ww, -o args/command/cmd, pgrep -a / -fl / --list-full) can carry API keys from a command line into the transcript.",
       "fix": "ps -o pid,lstart,comm -p <pids>, or pgrep -x <name>: identify processes without widening the output to argv",
+      "primer": "Never print process argv (ps aux, pgrep -a); keys leak into the transcript.",
       "incident": "2026-10-25 handoff standing rule: never print process argv \u2014 a key handed to a child process on its command line lands in the output"
     },
     {
@@ -246,6 +260,7 @@
       "check": "stash_untracked",
       "message": "git stash without -u / --include-untracked / -a leaves untracked files in the working tree while the stash looks like it saved everything; a later clean or checkout can then destroy them.",
       "fix": "git stash -u, or commit to a named WIP checkpoint branch instead \u2014 a branch is more visible than a stash",
+      "primer": "git stash without -u leaves untracked files behind; use stash -u or a WIP branch.",
       "incident": "backup-before-editing-uncommitted-work: tracked \u2260 recoverable, and untracked work is the part a plain stash silently omits"
     },
     {
@@ -263,6 +278,7 @@
       "check": "unquoted_var_arglist",
       "message": "zsh does not word-split an unquoted $var, so `cmd $files 2>/dev/null` passes the whole list as ONE argument (usually a nonexistent path); with stderr discarded the failure reads as a clean empty result.",
       "fix": "use ${=files} or an array ($files[@]), or xargs; never trust an empty search that hides its own stderr without a planted positive control",
+      "primer": "Unquoted $files is ONE argument in zsh; use ${=files} and plant a positive control.",
       "incident": "2026-10-25, observation 0046: 17 coverage greps printed nothing, including the planted positive control"
     },
     {
@@ -279,6 +295,7 @@
       "check": "branch_delete_unrecoverable",
       "message": "this branch deletion would leave its commits reachable from no other ref: `git branch -D` overrides git's own unmerged-branch refusal, and `git push --delete` refuses only the branch the remote's HEAD points at \u2014 which stops applying the moment origin/HEAD points elsewhere.",
       "fix": "check first:  git branch -a --contains <branch>  and  git merge-base --is-ancestor <branch> origin/<default>  \u2014 if nothing else lists it, merge it or push it somewhere before deleting",
+      "primer": "Before branch -D or push --delete: git branch -a --contains + merge-base --is-ancestor.",
       "incident": "2026-10-27, porting run-to-completion's ship cleanup: a repo whose config names a default branch origin/HEAD does not point at (echoprism ships master) has no protection at all"
     },
     {
@@ -295,6 +312,7 @@
       "check": "discards_uncommitted",
       "message": "this git command discards uncommitted changes instead of refusing: git checkout/git restore replace working-tree files from the index or a revision, git reset --hard drops staged and unstaged edits, and git clean -f deletes untracked files — each exits 0.",
       "fix": "commit the work, or park it first (git stash -u, or a WIP branch — a branch is more visible); when discarding really is intended, end the command with  # wys:allow git/discards-uncommitted",
+      "primer": "checkout, restore, reset --hard, clean -f discard work and exit 0; commit or stash -u first.",
       "incident": "2026-10-28, echoprism Task 10: a git checkout -- src-tauri/src/db/queries.rs 2>/dev/null meant to revert a test mutation also discarded the uncommitted backfill work in the same file; the loss surfaced only when the work had to be redone."
     },
     {
@@ -310,6 +328,7 @@
       "check": "read_pages_non_pdf",
       "message": "Read's `pages` parameter applies only to PDFs: on a text file it is silently ignored and the call returns the file from line 1 again, with no error — a re-read that looks like a fresh one.",
       "fix": "page a text file with  offset=<1-based start line>  limit=<number of lines>",
+      "primer": "Read pages= is PDF-only; page text files with offset= and limit= instead.",
       "incident": "2026-10-25, echoprism Phase 5: a .tsx was read with pages 1/2/3 six times in one turn, each returning lines 1-55 again while reporting success; a memory describing the trap was loaded throughout."
     },
     {
@@ -327,6 +346,7 @@
       "check": "edit_anchor_mid_indent",
       "message": "this Edit's old_string starts with indentation but matches INSIDE a deeper-indented line: the replacement keeps the line's extra leading whitespace, which silently changes block nesting while every targeted test can stay green.",
       "fix": "anchor on whole lines at their exact indentation — copy old_string from a fresh Read of the file, never from recall",
+      "primer": "Edit old_string must be whole lines at exact indentation from a FRESH Read.",
       "incident": "2026-10-28, waypoints repo-category session: an 8-space anchor matched mid-indent inside a 12-space line and moved a block out of its if; the targeted tests stayed green and only Pyright plus the full suite caught it."
     },
     {
@@ -342,6 +362,7 @@
       "pattern": "(?m)(?:^|[;&|(]\\s*|\\benv\\s+(?:\\S+=\\S+\\s+)*)claude(?=\\s)(?![^;&|]*--strict-mcp-config)[^;&|]*?\\s(?:-p|--print)\\b",
       "message": "a headless `claude -p` loads EVERY configured MCP server before its first token: about five minutes of startup and one hang risk per server, measured at 5:26 wall-clock for a one-word reply.",
       "fix": "add --strict-mcp-config --mcp-config '{\"mcpServers\":{}}' when the job needs no MCP tools; a run that WRITES also needs --permission-mode bypassPermissions (a headless run cannot answer a permission prompt and grinds silently)",
+      "primer": "Headless claude -p loads every MCP server first; pass --strict-mcp-config and empty servers.",
       "incident": "2026-10-25, the daily-skill-review launchd runner: a bare `claude -p` one-word probe took 5:26 at 3% CPU, nearly all of it MCP startup."
     },
     {
@@ -357,6 +378,7 @@
       "pattern": "\\bgit\\s+(?:-C\\s+\\S+\\s+)?add\\s+(?:(?:-[A-Za-z]*A[A-Za-z]*|--all)|\\.)(?=\\s|$|[;&|])",
       "message": "git add -A / --all / . stages EVERYTHING in the tree, including the user's unsaved work and files you never touched, so one commit swallows changes nobody reviewed.",
       "fix": "stage by path: git add <file> ... (derive the paths from git status --porcelain or git ls-files), then confirm with git diff --cached --stat before committing",
+      "primer": "Stage by path, never git add -A or .; confirm with git diff --cached --stat.",
       "incident": "recorded in memory backup-before-editing-uncommitted-work: `git add -A` clobbered uncommitted work that was not mine to commit."
     },
     {
@@ -372,6 +394,7 @@
       "pattern": "find\\b.*?-exec\\s+awk\\b.*?\\bNR\\s*==\\s*1\\b.*?\\{\\}\\s*\\+",
       "message": "in a batched `find -exec awk ... {} +` one awk process reads many files in sequence, so NR==1 is true only for the FIRST file; every later file is skipped and the count looks plausible.",
       "fix": "use FNR==1 (per-file line number) instead of NR==1, and pair any zero-guard with an independently derived file count",
+      "primer": "In find -exec awk {} + use FNR==1, not NR==1; pair zero-guards with a real count.",
       "incident": "recorded in the task-observer session-start scan: an NR==1 header parse inside a batched find -exec awk examined only the first file while the command exited 0."
     }
   ]
