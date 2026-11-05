@@ -1,3 +1,19 @@
+## [0.9.0] — 2026-11-05
+
+### Added — session-start primer: every rule's one-line `primer` injected once at SessionStart
+
+- Each of the 23 rules in `rules/rules.json` carries a `primer` field (imperative, <= 110 chars,
+  <= 2,400 chars total). The new `watch-your-step.py primer` subcommand renders them grouped by
+  family into a SessionStart `additionalContext` (~2.1 KB), registered in `hooks/hooks.json`
+  beside `git-guard ensure` with timeout 5. The PreToolUse guard stays the safety net; the
+  primer is prevention, so the model knows the trap before it types the command.
+- Honours the same knobs as the guard: `WATCH_YOUR_STEP_DISABLE=all` (or individual ids)
+  silences it, `WATCH_YOUR_STEP_SHELL=bash` omits the `zsh/` rules, a corrupt rules file prints
+  nothing and exits 0 (fail-open). `--help` documents the subcommand; unknown flags exit 2.
+- Barrier: `tests/test_primer.py` fails the suite when a rule ships without a primer or over
+  budget, and `test_rules_schema` now requires the field. TDD with mutation checks; full suite
+  346 passed.
+
 ## [0.8.2] — 2026-11-05
 
 ### Fixed — `zsh/unmatched-glob` no longer warns about a glob over files an earlier statement creates
