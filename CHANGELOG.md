@@ -1,3 +1,14 @@
+## [0.9.1] — 2026-11-09
+
+### Added — `python/mutation-stale-pyc`: warn on a mutation loop that can run a stale `.pyc`
+
+- Warns when one Bash command edits in place (`sed -i`, `sed --in-place`, `perl -i`) AND runs `pytest`
+  without `PYTHONDONTWRITEBYTECODE=` or `python -B`. CPython validates a cached `.pyc` on (mtime in whole
+  seconds, size), so a same-width mutation within the same second imports the previous version: a mutant
+  can pass, or go red as a different mutant. Incident 2026-11-08 (csl knob table), in `docs/incidents.md`.
+- 4 flag + 5 pass cases; a mutation that removes the exemption turns the pass case red. 24 rules now, each
+  with its `primer` line.
+
 ## [0.9.0] — 2026-11-05
 
 ### Added — session-start primer: every rule's one-line `primer` injected once at SessionStart

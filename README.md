@@ -48,6 +48,7 @@ is command substitution: the code span is replaced by the output of running it, 
 | `claude/headless-loads-mcp` | warn | a headless `claude -p`/`--print` without `--strict-mcp-config`: it loads every configured MCP server first (about five minutes of startup, one hang risk per server) |
 | `git/add-all` | warn | `git add -A`, `--all` or `.`: stages the whole tree, including the user's unsaved work. Fires inside throwaway test repos too; `# wys:allow git/add-all` |
 | `shell/awk-nr1-batched-find` | warn | `find … -exec awk '… NR==1 …' {} +`: one awk reads many files, so `NR==1` is true for the first file only; use `FNR==1` |
+| `python/mutation-stale-pyc` | warn | `sed -i` / `perl -i` and `pytest` in one command without `PYTHONDONTWRITEBYTECODE=1` (or `python -B`): a same-size edit within the same second reuses the stale `.pyc`, so the test runs the previous version |
 
 The `git/` rules and `zsh/unmatched-glob` are **state-aware**: instead of matching text, they look at the
 repository or the filesystem at hook time (the staged diff, the worktree's ignored files, the checkout's dirty

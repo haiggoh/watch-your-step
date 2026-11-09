@@ -200,6 +200,17 @@ files and `NR==1` is true for the first file only. A header parse built on it ex
 command exited 0 and the output looked plausible (task-observer session-start scan). `FNR==1` is per file.
 `-exec … \;` runs one awk per file, so `NR==1` is correct there and passes.
 
+## python/mutation-stale-pyc
+
+CPython reuses a cached `.pyc` when the source's recorded mtime (whole seconds) and size both match. A mutation
+loop (`cp good.py x.py; sed -i 's/…/…/' x.py; pytest`) typically swaps one value for another of the same width
+and runs within the same second as the previous compile, so the test imports the PREVIOUS version. On
+2026-11-08, four same-width edits of the csl knob frame table each ran against the prior mutant: two survived
+and one went red as the wrong mutant, a result that reads as "the tests are weak". The fix was already written
+in memory (`functional-verification`) and still not applied, which is why it became a rule here, where the loop
+runs. `PYTHONDONTWRITEBYTECODE=1` (or `python -B`) silences it; clear `__pycache__` before the loop too, and judge
+each mutant by its own `AssertionError` line rather than the exit code.
+
 ## The git guard (hook.wys-branch-guard, hook.wys-push-guard)
 
 `git/branch-delete-unrecoverable` judges the command line an agent types, and a re-measurement on 0.5.0
