@@ -150,6 +150,15 @@
     {"rule": "shell/awk-nr1-batched-find", "expect": "flag", "tool": "Bash", "command": "find d -type f -exec awk 'NR == 1 && /^---/ {fm=1}' {} + | wc -l"},
     {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'FNR==1 {print FILENAME}' {} +"},
     {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'NR==1 {print}' {} \\;"},
-    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "awk 'NR==1' file.txt"}
+    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "awk 'NR==1' file.txt"},
+    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "for m in 's/a/b/' 's/c/d/'; do cp /tmp/good.py bin/x.py; sed -i '' \"$m\" bin/x.py; $PY -m pytest tests/test_x.py -q > /tmp/mut.txt 2>&1; echo $?; done"},
+    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "sed -i.bak 's/1/2/' src/mod.py && pytest -q tests/"},
+    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "sed -Ei 's/x/y/' a.py; python3 -m pytest"},
+    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "perl -pi -e 's/1/2/' mod.py; pytest -x"},
+    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "export PYTHONDONTWRITEBYTECODE=1; sed -i '' 's/a/b/' x.py; pytest -q"},
+    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed -i '' 's/a/b/' x.py; python3 -B -m pytest -q"},
+    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed -i '' 's/a/b/' config.txt && git diff"},
+    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "pytest -q tests/test_x.py"},
+    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' x.py > /tmp/y.py; pytest -q"}
   ]
 }

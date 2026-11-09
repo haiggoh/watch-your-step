@@ -396,6 +396,22 @@
       "fix": "use FNR==1 (per-file line number) instead of NR==1, and pair any zero-guard with an independently derived file count",
       "primer": "In find -exec awk {} + use FNR==1, not NR==1; pair zero-guards with a real count.",
       "incident": "recorded in the task-observer session-start scan: an NR==1 header parse inside a batched find -exec awk examined only the first file while the command exited 0."
+    },
+    {
+      "id": "python/mutation-stale-pyc",
+      "severity": "warn",
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "pattern": "(?s)^(?!.*\\bPYTHONDONTWRITEBYTECODE=)(?!.*\\bpython3?(?:\\.\\d+)?\\s+-B\\b)(?=.*\\b(?:sed\\s+(?:-[A-Za-z]*\\s+)*(?:-[A-Za-z]*i|--in-place)|perl\\s+(?:-\\S+\\s+)*-[A-Za-z]*i))(?=.*\\bpytest\\b)",
+      "message": "an in-place edit (sed -i / perl -i) and a pytest run in one command is a mutation loop: CPython reuses a cached .pyc when the source's mtime (whole seconds) and SIZE match, so a same-width edit made within the same second as the last compile runs the PREVIOUS version — a mutant can pass, or go red as a different mutant.",
+      "fix": "set PYTHONDONTWRITEBYTECODE=1 for the loop (or run python -B) and delete __pycache__ before it starts; then judge each mutant by its own AssertionError line, not the exit code",
+      "primer": "Mutation loop (sed -i + pytest)? Set PYTHONDONTWRITEBYTECODE=1 and clear __pycache__ first.",
+      "incident": "2026-11-08, csl knob-table mutations: four same-width table edits each imported the previous mutant's .pyc — two survived, one went red as the wrong mutant; the fix was already in memory (functional-verification) and still not applied."
     }
   ]
 }
