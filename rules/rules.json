@@ -244,7 +244,7 @@
       "message": "ps/pgrep output that includes full process arguments (aux/ax, -ef or -e -f, -ww, -o args/command/cmd, pgrep -a / -fl / --list-full) can carry API keys from a command line into the transcript.",
       "fix": "ps -o pid,lstart,comm -p <pids>, or pgrep -x <name>: identify processes without widening the output to argv",
       "primer": "Never print process argv (ps aux, pgrep -a); keys leak into the transcript.",
-      "incident": "2026-10-25 handoff standing rule: never print process argv \u2014 a key handed to a child process on its command line lands in the output"
+      "incident": "2026-10-25 handoff standing rule: never print process argv — a key handed to a child process on its command line lands in the output"
     },
     {
       "id": "git/stash-untracked",
@@ -259,9 +259,9 @@
       ],
       "check": "stash_untracked",
       "message": "git stash without -u / --include-untracked / -a leaves untracked files in the working tree while the stash looks like it saved everything; a later clean or checkout can then destroy them.",
-      "fix": "git stash -u, or commit to a named WIP checkpoint branch instead \u2014 a branch is more visible than a stash",
+      "fix": "git stash -u, or commit to a named WIP checkpoint branch instead — a branch is more visible than a stash",
       "primer": "git stash without -u leaves untracked files behind; use stash -u or a WIP branch.",
-      "incident": "backup-before-editing-uncommitted-work: tracked \u2260 recoverable, and untracked work is the part a plain stash silently omits"
+      "incident": "backup-before-editing-uncommitted-work: tracked ≠ recoverable, and untracked work is the part a plain stash silently omits"
     },
     {
       "id": "zsh/unquoted-var-arglist",
@@ -293,8 +293,8 @@
         "raw"
       ],
       "check": "branch_delete_unrecoverable",
-      "message": "this branch deletion would leave its commits reachable from no other ref: `git branch -D` overrides git's own unmerged-branch refusal, and `git push --delete` refuses only the branch the remote's HEAD points at \u2014 which stops applying the moment origin/HEAD points elsewhere.",
-      "fix": "check first:  git branch -a --contains <branch>  and  git merge-base --is-ancestor <branch> origin/<default>  \u2014 if nothing else lists it, merge it or push it somewhere before deleting",
+      "message": "this branch deletion would leave its commits reachable from no other ref: `git branch -D` overrides git's own unmerged-branch refusal, and `git push --delete` refuses only the branch the remote's HEAD points at — which stops applying the moment origin/HEAD points elsewhere.",
+      "fix": "check first:  git branch -a --contains <branch>  and  git merge-base --is-ancestor <branch> origin/<default>  — if nothing else lists it, merge it or push it somewhere before deleting",
       "primer": "Before branch -D or push --delete: git branch -a --contains + merge-base --is-ancestor.",
       "incident": "2026-10-27, porting run-to-completion's ship cleanup: a repo whose config names a default branch origin/HEAD does not point at (echoprism ships master) has no protection at all"
     },
@@ -412,6 +412,56 @@
       "fix": "set PYTHONDONTWRITEBYTECODE=1 for the loop (or run python -B) and delete __pycache__ before it starts; then judge each mutant by its own AssertionError line, not the exit code",
       "primer": "Mutation loop (sed -i + pytest)? Set PYTHONDONTWRITEBYTECODE=1 and clear __pycache__ first.",
       "incident": "2026-11-08, csl knob-table mutations: four same-width table edits each imported the previous mutant's .pyc — two survived, one went red as the wrong mutant; the fix was already in memory (functional-verification) and still not applied."
+    },
+    {
+      "id": "shell/pipe-hides-exit",
+      "severity": "warn",
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "bare"
+      ],
+      "check": "pipe_hides_exit",
+      "message": "a test runner is piped into tail/head/grep/tee and the pipeline's exit code is then CONSUMED (&&, ||, reading $?, or the pipeline is backgrounded): a pipeline's exit is its LAST stage's, so a failing suite reports success and a red run reads green.",
+      "fix": "redirect to a file and take the runner's own status: `cmd > log 2>&1; echo EXIT:$? >> log`, or `set -o pipefail` first; backgrounded pipelines need the same redirect — read the log, not the job's exit",
+      "primer": "Piped test run? The pipeline's exit is tail's, not the suite's — redirect to a file and read EXIT:$?.",
+      "incident": "obs 0062 (3x, incl. 2026-10-30) + obs 0097 (2026-11-07): a backgrounded `pytest | tail -6` notification said exit 0 while 8 tests had failed."
+    },
+    {
+      "id": "git/pathspec-case",
+      "severity": "warn",
+      "stateful": true,
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "check": "pathspec_case",
+      "message": "a pathspec whose directory case differs from the index spelling while core.ignorecase=true (the macOS default): git treats the two spellings as different paths, so read-only probes (status/log/ls-files/check-ignore) report a false ABSENCE for a tracked file, and add/commit stage or miss the wrong spelling.",
+      "fix": "use the index spelling: `git ls-files` shows it — retype the path with the case the index holds",
+      "primer": "git paths match case-SENSITIVELY even on a case-insensitive FS — match the index spelling (git ls-files)",
+      "incident": "obs 0071 (2026-10-28, recurred 2026-11-11): _playbooks typed _PLAYBOOKS — add staged it, commit failed 'pathspec did not match'; status/log reported absence for the tracked file."
+    },
+    {
+      "id": "git/switch-in-primary",
+      "severity": "warn",
+      "stateful": true,
+      "tools": [
+        "Bash"
+      ],
+      "shells": [],
+      "context": [
+        "raw"
+      ],
+      "check": "switch_in_primary",
+      "message": "a NEW branch (-c/-C for switch, -b/-B for checkout) is being cut in the repo's PRIMARY checkout: launchers and other tooling resolve through that checkout, so the branch switch silently changes what they run.",
+      "fix": "cut a worktree instead: git worktree add -b <branch> ../.wt/<name> origin/<default> (a fresh clone with no consumers is a legitimate exception)",
+      "primer": "New branch in the PRIMARY checkout? Tooling resolves through it — git worktree add -b <branch> ../.wt/<name>.",
+      "incident": "obs 0073 (2026-10-28): five canonical checkouts branch-switched for one-file edits despite the documented rule; a concurrent session then cut its own branch from one of them."
     }
   ]
 }

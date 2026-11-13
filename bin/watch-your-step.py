@@ -782,6 +782,115 @@ STASH_SAFE_SUB = {"list", "show", "pop", "apply", "drop", "clear", "branch", "cr
 STASH_UNTRACKED_SAFE = {"-u", "--include-untracked", "--all", "-a"}
 
 
+# A test runner piped into a sink whose exit is then consumed: pytest / python -m pytest /
+# npm|yarn|pnpm|bun test / go|cargo|make test / a bash|sh tests/*.sh script, into tail|head|grep|tee|wc.
+# A pipeline's exit is its LAST stage's, so `pytest | tail` reports tail's 0, not the suite's.
+PIPE_RUNNER = re.compile(
+    r"\b(?:python3?\s+-m\s+pytest|pytest|npm\s+(?:run\s+)?test|yarn\s+test|pnpm\s+test|bun\s+test|"
+    r"go\s+test|cargo\s+test|make\s+test|(?:bash|sh)\s+tests/\S+\.sh|\./tests/\S+\.sh)"
+    r"[^|\n;&]*\|\s*(tail|head|grep|tee|wc)\b")
+
+
+def check_pipe_hides_exit(texts, bare_view, **_):
+    """A test runner piped into tail/head/grep/tee whose exit code is then CONSUMED: followed by
+    && or ||, its status read ($?), or the pipeline backgrounded (&) — a failing suite reads
+    green (obs 0062 3x + obs 0097: a backgrounded `pytest | tail -6` said exit 0 with 8 failing).
+    Plain `pytest | tail -3` with no consumer of the exit, a verdict already under
+    `set -o pipefail`, and `cmd > log 2>&1; echo EXIT:$?` are all fine."""
+    for m in PIPE_RUNNER.finditer(bare_view):
+        before, after = bare_view[: m.start()], bare_view[m.end():]
+        if re.search(r"\bset\s+-[A-Za-z]*o\s+pipefail\b", before):
+            continue
+        rest = after.split("\n", 1)[0]
+        if re.search(r"&&|\|\||\$\?|(?<!&)&\s*$", rest):
+            return (f"the pipeline's exit code is {m.group(1)}'s, not the test runner's — when the "
+                    f"verdict is read from this line (&&/||/$?/background), a failing suite reports success")
+    return False
+
+
+# git subcommands whose <pathspec> arguments are matched against the INDEX (case-sensitively) even
+# on a case-insensitive filesystem: a wrong-case spelling stages a second spelling or reports a
+# false ABSENCE for a tracked file (obs 0071: _playbooks typed as _PLAYBOOKS, twice).
+GIT_PATHSPEC = re.compile(
+    r"\bgit(?:\s+-C\s+(\S+))?\s+(add|commit|restore|status|log|ls-files|check-ignore)\b([^\n;|&]*)")
+_PATHSPEC_VALUE_FLAGS = {"-m", "--message", "-F", "--file"}
+
+
+def _pathspec_paths(rest):
+    """Non-flag tokens after the subcommand; after `--` every token is a path; value-taking
+    flags swallow the next token."""
+    paths, skip_next, after_dd = [], False, False
+    for t in rest.split():
+        if skip_next:
+            skip_next = False
+            continue
+        if t == "--":
+            after_dd = True
+            continue
+        if not after_dd and t.startswith("-"):
+            if t in _PATHSPEC_VALUE_FLAGS:
+                skip_next = True
+            continue
+        paths.append(t.strip("\"'"))
+    return paths
+
+
+def _git(d, *args):
+    """The module's own git() helper (None on failure) — stdout, stripped."""
+    return (git(list(args), d, timeout=10) or "").strip()
+
+
+def check_pathspec_case(texts, bare_view, cwd=None, **_):
+    """A pathspec whose case differs from the index spelling, while core.ignorecase=true (the
+    macOS default): `git ls-files -- <typed>` is empty but a case-twin is tracked, so read-only
+    probes report absence and add/commit stage or miss the wrong spelling. Silent when the config
+    is false (a case-sensitive volume: there the two spellings really are different files) or the
+    target is not a repo."""
+    for m in GIT_PATHSPEC.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(1), cwd)
+        if not d:
+            continue
+        for p in _pathspec_paths(m.group(3)):
+            if not p or _git(d, "ls-files", "--", p):
+                continue
+            if _git(d, "config", "--get", "core.ignorecase") != "true":
+                continue
+            tracked = _git(d, "ls-files").split()
+            twins = [t for t in tracked if t.lower() == p.lower()]
+            if twins:
+                return (f"{p} is spelled {twins[0]} in the index — git treats the two spellings as "
+                        f"different paths, so this probe reports absence for a tracked file "
+                        f"(and add/commit with it stages or misses the wrong spelling)")
+    return False
+
+
+SWITCH_CREATE = re.compile(
+    r"\bgit(?:\s+-C\s+(\S+))?\s+(?:switch|checkout)\s+(?:-[A-Za-z]+\s+)*(-c|-C|-b|-B)\s+")
+
+
+def check_switch_in_primary(texts, bare_view, cwd=None, **_):
+    """A NEW branch (-c/-C for switch, -b/-B for checkout) cut in the repo's PRIMARY checkout
+    (--git-dir == --git-common-dir): launchers and other tooling resolve through that checkout,
+    so the switch changes what they run (obs 0073: five canonical checkouts switched for
+    one-file edits). A linked worktree or a plain `git switch main` is fine. WARNING, not block:
+    a fresh clone with no consumers is legitimate."""
+    for m in SWITCH_CREATE.finditer(bare_view):
+        d = resolve_dir(bare_view[: m.start()], m.group(1), cwd)
+        if not d:
+            continue
+        gd = _git(d, "rev-parse", "--absolute-git-dir")
+        cgd = _git(d, "rev-parse", "--git-common-dir")
+        if not gd or not cgd:
+            continue
+        if not os.path.isabs(cgd):
+            cgd = os.path.normpath(os.path.join(d, cgd))
+        if gd == cgd:
+            return ("this is the repo's PRIMARY checkout — other tooling resolves through it; a "
+                    "branch switch here changes what they run. Cut a worktree instead: "
+                    "git worktree add -b <branch> ../.wt/<name> origin/<default>")
+    return False
+
+
 def check_stash_untracked(texts, bare_view, cwd=None, **_):
     for m in STASH.finditer(bare_view):
         toks = re.split(r"[;&|\n]", bare_view[m.end():])[0].split()
@@ -1060,6 +1169,9 @@ CHECKS = {
     "unmatched_glob": check_unmatched_glob,
     "worktree_add_dirty": check_worktree_add_dirty,
     "ps_argv": check_ps_argv,
+    "pipe_hides_exit": check_pipe_hides_exit,
+    "pathspec_case": check_pathspec_case,
+    "switch_in_primary": check_switch_in_primary,
     "stash_untracked": check_stash_untracked,
     "unquoted_var_arglist": check_unquoted_var_arglist,
     "branch_delete_unrecoverable": check_branch_delete_unrecoverable,

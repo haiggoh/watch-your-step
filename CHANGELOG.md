@@ -1,3 +1,21 @@
+## [0.10.0] — 2026-11-13
+
+### Added — three rules from the measured incident log
+
+- `shell/pipe-hides-exit` (warn): a test runner piped into `tail`/`head`/`grep`/`tee` whose exit
+  code is then CONSUMED (`&&`, `||`, reading `$?`, or the pipeline backgrounded) — a pipeline's
+  exit is its last stage's, so a failing suite reads green. 4 flag + 5 pass cases; `set -o pipefail`
+  and `cmd > log 2>&1; echo EXIT:$?` are exempt. Obs 0062 (3x) + obs 0097.
+- `git/pathspec-case` (warn, stateful): a pathspec typed with a different directory case than the
+  index holds, while `core.ignorecase=true` (the macOS default) — read-only probes report a false
+  ABSENCE for a tracked file, add/commit stage or miss the wrong spelling. Silent on a
+  case-sensitive volume. Obs 0071 (2x).
+- `git/switch-in-primary` (warn, stateful): a NEW branch (`switch -c/-C`, `checkout -b/-B`) cut in
+  the repo's PRIMARY checkout, which other tooling resolves through. Suggests `git worktree add`.
+  Obs 0073.
+- 27 rules; both stateful rules proven against real temp repos in `tests/test_git_rules.py`
+  (flag, pass, `-C`-target resolution, case-sensitive volume), each mutation-tested red.
+
 ## [0.9.1] — 2026-11-09
 
 ### Added — `python/mutation-stale-pyc`: warn on a mutation loop that can run a stale `.pyc`

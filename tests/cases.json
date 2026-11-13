@@ -159,6 +159,15 @@
     {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed -i '' 's/a/b/' x.py; python3 -B -m pytest -q"},
     {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed -i '' 's/a/b/' config.txt && git diff"},
     {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "pytest -q tests/test_x.py"},
-    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' x.py > /tmp/y.py; pytest -q"}
+    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' x.py > /tmp/y.py; pytest -q"},
+    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "pytest -q | tail -3 && git commit -m x"},
+    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "bash tests/test_x.sh | grep -c ok; echo rc=$?"},
+    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "go test ./... | tail -5 || echo failed"},
+    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "pytest -q | tail -6 &"},
+    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "python3 -m pytest tests/ | tee log | tail -3 && echo done"},
+    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "pytest -q | tail -3"},
+    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "set -o pipefail; pytest -q | tail -3 && echo ok"},
+    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "pytest -q > log 2>&1; echo EXIT:$?"},
+    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "cat out.txt | tail -3 && echo done"}
   ]
 }

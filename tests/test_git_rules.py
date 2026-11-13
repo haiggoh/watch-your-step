@@ -13,7 +13,8 @@ wys = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wys)
 RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
 TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored", "git/worktree-add-dirty",
-          "git/stash-untracked", "git/branch-delete-unrecoverable", "git/discards-uncommitted"}
+          "git/stash-untracked", "git/branch-delete-unrecoverable", "git/discards-uncommitted",
+          "git/pathspec-case", "git/switch-in-primary"}
 TESTED_ELSEWHERE = {"zsh/unmatched-glob",            # proven in tests/test_unmatched_glob.py
                     "tool/edit-anchor-mid-indent",   # proven in tests/test_tool_rules.py
                     "shell/python-shebang-mismatch"} # proven in tests/test_shebang_rule.py
@@ -794,3 +795,76 @@ def test_ls_remote_timeout_fails_open(origin_repo, monkeypatch):
     monkeypatch.setattr(wys, "git", timeout_on_ls_remote)
     sh(origin_repo, "push", "-q", "origin", "topic")
     assert not fired("git push origin --delete topic", origin_repo, RULE)
+
+
+# ---- git/pathspec-case: a path whose directory case differs from the index spelling -----------
+# (core.ignorecase=true): git treats the two spellings as different paths, so add stages a second
+# spelling and the read-only probes (status/log/ls-files/check-ignore) report a false ABSENCE for
+# a tracked file (obs 0071, recurred 2026-11-11 in the silent variant).
+RULE_PC = "git/pathspec-case"
+
+
+@pytest.fixture
+def tracked_playbook(repo):
+    p = repo / "_playbooks"
+    p.mkdir()
+    (p / "x.md").write_text("playbook\n")
+    sh(repo, "add", "_playbooks/x.md")
+    sh(repo, "commit", "-q", "-m", "playbook")
+    return repo
+
+
+def test_pathspec_case_flags_wrong_case(tracked_playbook):
+    assert fired("git add _PLAYBOOKS/x.md", tracked_playbook, RULE_PC)
+
+
+def test_pathspec_case_flags_readonly_probes(tracked_playbook):
+    for probe in ("git status _PLAYBOOKS/x.md", "git log -- _PLAYBOOKS/x.md",
+                  "git ls-files _PLAYBOOKS/x.md", "git check-ignore -v _PLAYBOOKS/x.md"):
+        assert fired(probe, tracked_playbook, RULE_PC), probe
+
+
+def test_pathspec_case_pass_correct_case(tracked_playbook):
+    assert not fired("git add _playbooks/x.md", tracked_playbook, RULE_PC)
+    assert not fired("git status _playbooks/x.md", tracked_playbook, RULE_PC)
+
+
+def test_pathspec_case_pass_genuinely_new_path(tracked_playbook):
+    # an untracked path with no case-twin anywhere in the index is nobody's typo
+    assert not fired("git add brand-new-dir/x.txt", tracked_playbook, RULE_PC)
+
+
+def test_pathspec_case_silent_on_sensitive_fs(tracked_playbook):
+    # Review Focus 4: on a case-SENSITIVE volume core.ignorecase is false — the rule must stay
+    # silent (there the two spellings really are different files)
+    sh(tracked_playbook, "config", "core.ignorecase", "false")
+    assert not fired("git add _PLAYBOOKS/x.md", tracked_playbook, RULE_PC)
+
+
+# ---- git/switch-in-primary: a branch cut in the repo's PRIMARY checkout -----------------------
+# (obs 0073: five canonical checkouts branch-switched for one-file edits while other tooling
+# resolves through them). WARNING, not block: a fresh clone with no consumers is legitimate.
+RULE_SP = "git/switch-in-primary"
+
+
+def test_switch_in_primary_flags(tracked_playbook):
+    assert fired("git switch -c feature", tracked_playbook, RULE_SP)
+    assert fired("git checkout -b feature", tracked_playbook, RULE_SP)
+
+
+def test_switch_in_primary_pass_in_linked_worktree(tracked_playbook, tmp_path):
+    sh(tracked_playbook, "worktree", "add", "-q", str(tmp_path / "wt"), "-b", "other")
+    assert not fired("git switch -c feature", tmp_path / "wt", RULE_SP)
+
+
+def test_switch_in_primary_pass_no_create(tracked_playbook):
+    # switching to an existing branch is a read of that branch, not a new one
+    assert not fired("git switch main", tracked_playbook, RULE_SP)
+
+
+def test_switch_in_primary_judges_the_C_target(tracked_playbook, tmp_path):
+    # Review Focus 5: run from inside the PRIMARY checkout's cwd but pointing -C at a linked
+    # worktree — the verdict must follow the -C TARGET, not the cwd (and the reverse)
+    sh(tracked_playbook, "worktree", "add", "-q", str(tmp_path / "wt"), "-b", "other")
+    assert not fired(f"git -C {tmp_path}/wt switch -c x", tracked_playbook, RULE_SP)
+    assert fired(f"git -C {tracked_playbook} switch -c y", tmp_path / "wt", RULE_SP)
