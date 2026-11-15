@@ -87,11 +87,18 @@ def test_portable_closure_complete_and_no_escapes():
             # inside a docstring/usage example (e.g. "git worktree add ... ../.wt/<name>")
             # is not flagged; only LIVE code escapes.
             if p.suffix == ".py":
-                import io as _io
-                import tokenize as _tok
-                live = "".join(tok.string for tok in _tok.generate_tokens(_io.StringIO(text).readline)
-                               if tok.type not in (_tok.STRING, _tok.COMMENT, _tok.NL, _tok.NEWLINE, _tok.INDENT, _tok.DEDENT, _tok.ENCODING))
-                assert "../" not in live, f"live-code ../ escape in {p.relative_to(PORTABLE)}"
+                # AST: flag ../ only in CALL ARGUMENTS (a path passed to open()/os.path/...).
+                # Plain string constants (rule guidance text like "git worktree add ... ../.wt/<name>")
+                # and docstrings are exempt — they are data, not resolved paths.
+                import ast as _ast
+                tree = _ast.parse(text)
+                for n in _ast.walk(tree):
+                    if isinstance(n, _ast.Call):
+                        for arg in list(n.args) + [k.value for k in n.keywords]:
+                            if isinstance(arg, _ast.Constant) and isinstance(arg.value, str) \
+                                    and "../" in arg.value:
+                                assert False, \
+                                    f"live-code ../ escape in {p.relative_to(PORTABLE)}: {arg.value!r}"
             elif p.suffix == ".sh":
                 assert re.search(r"(?<!\.)\.\./", text) is None, \
                     f"literal ../ escape in {p.relative_to(PORTABLE)}"
@@ -162,3 +169,15 @@ def test_all_skill_md_strict_parse_host_and_portable():
         assert m, f"{f}: no frontmatter block"
         d = yaml.safe_load(m.group(1))
         assert isinstance(d, dict) and d.get("name") and d.get("description"), f
+
+
+def test_portable_cli_emits_primer_from_portable_root():
+    """The functional proof advertised in the commit/CHANGELOG: the portable CLI runs from
+    the portable root and finds its rules/ there (the SessionStart primer is emitted)."""
+    cli = (PORTABLE / "scripts" / "watch-your-step.py").resolve()
+    r = subprocess.run([sys.executable, str(cli), "primer"],
+                       capture_output=True, text=True, cwd=ROOT, timeout=15)
+    assert r.returncode == 0, r.stderr
+    payload = json.loads(r.stdout)  # the hook envelope; the primer is inside
+    primer = payload["hookSpecificOutput"]["additionalContext"]
+    assert "watch-your-step session primer" in primer and len(primer.splitlines()) > 5, primer[:200]
