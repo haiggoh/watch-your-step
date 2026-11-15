@@ -1,0 +1,77 @@
+{
+  "builder": "scripts/build-portable.py",
+  "builder_version": "1.0.0",
+  "components": [
+    {
+      "adaptation_class": "mechanical",
+      "evidence_level": "source-inspected",
+      "kind": "manifest",
+      "notes": "same name+version as the host manifest; an installed marketplace plugin wins over a synced copy in Code, so no double-run",
+      "path": ".claude-plugin/plugin.json",
+      "surfaces": {
+        "chat": true,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "native-unchanged",
+      "evidence_level": "source-inspected",
+      "kind": "skill",
+      "notes": "the primer/rule authoring guidance; strict-YAML frontmatter pinned by tests",
+      "path": "skills/watch-your-step/SKILL.md",
+      "surfaces": {
+        "chat": true,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "mechanical",
+      "evidence_level": "source-inspected",
+      "kind": "hooks",
+      "notes": "PreToolUse check + SessionStart primer + git-guard ensure; commands rewritten bin/ -> scripts/; Chat ignores plugin hooks, Cowork loads them",
+      "path": "hooks/hooks.json",
+      "surfaces": {
+        "chat": false,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "mechanical",
+      "evidence_level": "source-inspected",
+      "kind": "script",
+      "notes": "moved bin/ -> scripts/ per C1; resolves rules/ at the portable root via dirname(dirname(__file__)); needs a local python runtime (chat:false)",
+      "path": "scripts/watch-your-step.py",
+      "surfaces": {
+        "chat": false,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "native-unchanged",
+      "evidence_level": "source-inspected",
+      "kind": "data",
+      "notes": "the rule set the CLI loads from ROOT/rules/rules.json; WATCH_YOUR_STEP_RULES override stays available",
+      "path": "rules/rules.json",
+      "surfaces": {
+        "chat": false,
+        "code": true,
+        "cowork": true
+      }
+    }
+  ],
+  "files": {
+    ".claude-plugin/plugin.json": "0c0e4a0f63fc96c543e5d1c0a888dbe8cb2c0e762d33bd14eb5ebba7e1662198",
+    "hooks/hooks.json": "1d4dcbfada86a9a00af0317a56beaa67823abd9068e6f9f541167dca559d6874",
+    "rules/rules.json": "2e02e49f69baf93cf87a3af566d71997a1f4d0f404006c35cd3b672081fc3e5d",
+    "scripts/watch-your-step.py": "66df79a53a275424ca12f40e1798be51a601f0cda566307d890087f17c1b9274",
+    "skills/watch-your-step/SKILL.md": "7b64eecc99b3ee592d202bba8301a45f9adc1bbd77afdca7162ef5e4e2ecdcca"
+  },
+  "schema": "haiggoh-portable-build/1",
+  "source_commit": "92ab8ca5eccccdb47f6f3749937af29a1cb54df2",
+  "source_repo": "haiggoh/watch-your-step",
+  "transform_version": "1"
+}

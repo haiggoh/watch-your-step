@@ -1,4 +1,22 @@
-## [0.10.0] — 2026-11-13
+# Changelog
+
+## [0.10.1] — 2026-11-15
+
+### Added — Phase 4 Wave B: committed portable package (COORDINATION C1/C2)
+
+- New `scripts/build-portable.py` (from the reviewed pilot pattern) generates the committed
+  `portable/` package: same-name manifest, the skill, the hooks (commands rewritten
+  bin/ -> scripts/), the CLI at `scripts/watch-your-step.py`, and `rules/rules.json` at the
+  portable ROOT (the CLI resolves ROOT = dirname(dirname(__file__))). Emits
+  `portable/PORTABLE-BUILD.json` (haiggoh-portable-build/1) and a deterministic
+  `dist/watch-your-step-portable.zip`.
+- `tests/test_portable.py` pins freshness, same-name manifest, no `bin/`, the host->portable
+  set (skill + hook refs + rules.json byte-identical), closure completeness (the .py escape
+  ban strips strings/comments via tokenize so usage examples like `../.wt/<name>` don't
+  false-positive), the C2 schema, deterministic side-effect-free zip — and a functional
+  check that the portable CLI emits the primer from the portable root.
+
+ 2026-11-13
 
 ### Added — three rules from the measured incident log
 
