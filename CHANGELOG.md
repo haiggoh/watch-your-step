@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.2] — 2026-11-16
+
+### Changed — SessionStart primer prominence (user request 2026-11-16)
+
+- `build_primer()` now names the detected shell on line 2 — "shell detected: zsh — the zsh/
+  section below applies to EVERY Bash call in this session" — and renders the detected shell's
+  rule group FIRST instead of alphabetical-last (fallback banner when the shell has no group).
+  Motivation: `zsh/equals-word` fired 3x in one session (plus incidents 2026-09-30, 2026-10-24)
+  while its group sat at line 30 of 36. The PreToolUse guard is unchanged — this is
+  prevention, so the guard stays a rarely-firing safety net.
+- `tests/test_primer.py` gains `test_primer_names_detected_shell_and_pins_its_group_first`
+  (red on the old ordering, green on the new — verified both ways).
+
 ## [0.10.1] — 2026-11-15
 
 ### Added — Phase 4 Wave B: committed portable package (COORDINATION C1/C2)

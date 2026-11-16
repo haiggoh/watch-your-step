@@ -93,6 +93,26 @@ def test_bash_shell_omits_zsh_only_rules():
     assert zsh_only[0]["primer"] not in ctx
 
 
+def test_primer_names_detected_shell_and_pins_its_group_first():
+    # 2026-11-16: zsh/equals-word fired 3x in one session while its group rendered LAST
+    # (alphabetical, line 30 of 36). The primer must name the detected shell and pin its
+    # group first, so shell-scoped traps are the first lines a model reads.
+    text = wys.build_primer(RULES, shell="zsh", disabled=set())
+    lines = text.splitlines()
+    assert lines[1].startswith("shell detected: zsh"), lines[1]
+    assert "EVERY Bash call" in lines[1]
+    groups = [ln for ln in lines if ln.endswith("/")]
+    assert groups[0] == "zsh/", groups
+    assert groups[1:] == sorted(groups[1:])
+    # a shell with no dedicated group gets the fallback banner, alphabetical order
+    btext = wys.build_primer(RULES, shell="fish", disabled=set())
+    blines = btext.splitlines()
+    assert blines[1].startswith("shell detected: fish")
+    assert "no fish-specific rules" in blines[1]
+    bgroups = [ln for ln in blines if ln.endswith("/")]
+    assert "zsh/" not in bgroups and bgroups == sorted(bgroups)
+
+
 def test_corrupt_rules_file_prints_nothing_exit_0(tmp_path):
     bad = tmp_path / "rules.json"
     bad.write_text("{not json")
