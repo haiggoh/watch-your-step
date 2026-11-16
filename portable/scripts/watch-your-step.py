@@ -1605,8 +1605,16 @@ def build_primer(rules, shell="zsh", disabled=()):
         groups.setdefault(r["id"].split("/", 1)[0], []).append(primer)
     if not groups:
         return ""
-    lines = [f"{MARK} session primer — know these traps up front; the guard blocks them at call time:"]
-    for prefix in sorted(groups):
+    header = f"{MARK} session primer — know these traps up front; the guard blocks them at call time:"
+    if shell in groups:
+        banner = (f"shell detected: {shell} — the {shell}/ section below applies to EVERY "
+                  f"Bash call in this session")
+        order = [shell] + sorted(p for p in groups if p != shell)
+    else:
+        banner = f"shell detected: {shell} — no {shell}-specific rules; the general sections apply"
+        order = sorted(groups)
+    lines = [header, banner]
+    for prefix in order:
         lines.append(f"{prefix}/")
         lines.extend(f"  - {p}" for p in groups[prefix])
     return "\n".join(lines)
