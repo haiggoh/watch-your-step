@@ -791,6 +791,23 @@ PIPE_RUNNER = re.compile(
     r"[^|\n;&]*\|\s*(tail|head|grep|tee|wc)\b")
 
 
+GREP_Q_FLAG = re.compile(r"--quiet\b|-(?:[A-Za-z]*q[A-Za-z]*)\b")
+
+
+def check_grep_q_mid_pipe(texts, bare_view, **_):
+    """`grep -q` suppresses stdout, so a grep -q that is followed by a pipe on the same command
+    always yields empty and the predicate is always false. Only the LAST stage of a pipeline may
+    carry -q. (incident 2026-11-16: `grep -lq pat files | grep -v x` emptied a sudo-in-terminal
+    --verify, which then reported NOT_VERIFIED while the launch had actually succeeded.)
+    A quoted pattern containing `|` can false-positive; severity warn, message says so."""
+    for m in re.finditer(r"\bgrep\b([^|\n;&]*)\|", bare_view):
+        if GREP_Q_FLAG.search(m.group(1)):
+            return ("grep -q mid-pipe: -q suppresses stdout, so this stage always yields empty and "
+                    "the pipeline's predicate is always false (a `|` inside a quoted pattern can "
+                    "false-positive this)")
+    return False
+
+
 def check_pipe_hides_exit(texts, bare_view, **_):
     """A test runner piped into tail/head/grep/tee whose exit code is then CONSUMED: followed by
     && or ||, its status read ($?), or the pipeline backgrounded (&) — a failing suite reads
@@ -1170,6 +1187,7 @@ CHECKS = {
     "worktree_add_dirty": check_worktree_add_dirty,
     "ps_argv": check_ps_argv,
     "pipe_hides_exit": check_pipe_hides_exit,
+    "grep_q_mid_pipe": check_grep_q_mid_pipe,
     "pathspec_case": check_pathspec_case,
     "switch_in_primary": check_switch_in_primary,
     "stash_untracked": check_stash_untracked,
@@ -1465,6 +1483,13 @@ def load_rules(path=None):
         return json.load(f)["rules"]
 
 
+def load_primer_notes(path=None):
+    """Top-level "primer_notes" of rules.json: primer-only lines for traps the guard does not
+    match (harness-level guards, response protocols). Empty when absent — never an error."""
+    with open(path or os.environ.get("WATCH_YOUR_STEP_RULES") or DEFAULT_RULES, encoding="utf-8") as f:
+        return json.load(f).get("primer_notes", [])
+
+
 def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None, strict=False):
     """Return the rules a tool call trips, in rules-file order.
 
@@ -1583,12 +1608,14 @@ def cmd_rules():
     return 0
 
 
-def build_primer(rules, shell="zsh", disabled=()):
+def build_primer(rules, shell="zsh", disabled=(), notes=()):
     """The SessionStart injection: one line per enabled rule for this shell, grouped by prefix.
 
-    Returns "" when nothing applies (disabled == "all", every id disabled, or the shell
-    excludes all rules) so the hook prints nothing. A rule without a primer is skipped here;
-    tests/test_primer.py is the barrier that keeps one from shipping in rules.json."""
+    `notes` are primer-only lines (rules.json top-level "primer_notes") for traps the guard itself
+    does not match — they always print, under a notes/ group. Returns "" when nothing applies
+    (disabled == "all", every id disabled, or the shell excludes all rules) so the hook prints
+    nothing. A rule without a primer is skipped here; tests/test_primer.py is the barrier that
+    keeps one from shipping in rules.json."""
     if isinstance(disabled, str):
         disabled = {s.strip() for s in disabled.split(",") if s.strip()}
     if "all" in disabled:
@@ -1603,6 +1630,9 @@ def build_primer(rules, shell="zsh", disabled=()):
         if not primer:
             continue
         groups.setdefault(r["id"].split("/", 1)[0], []).append(primer)
+    for n in notes:
+        if n and n.strip():
+            groups.setdefault("notes", []).append(n.strip())
     if not groups:
         return ""
     header = f"{MARK} session primer — know these traps up front; the guard blocks them at call time:"
@@ -1623,7 +1653,8 @@ def build_primer(rules, shell="zsh", disabled=()):
 def cmd_primer():
     try:
         shell = os.environ.get("WATCH_YOUR_STEP_SHELL") or os.path.basename(os.environ.get("SHELL", "sh"))
-        text = build_primer(load_rules(), shell=shell, disabled=os.environ.get("WATCH_YOUR_STEP_DISABLE", ""))
+        text = build_primer(load_rules(), shell=shell, disabled=os.environ.get("WATCH_YOUR_STEP_DISABLE", ""),
+                            notes=load_primer_notes())
         if text:
             sys.stdout.write(json.dumps({"hookSpecificOutput": {
                 "hookEventName": "SessionStart",

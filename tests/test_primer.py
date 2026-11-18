@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "bin" / "watch-your-step.py"
 HOOKS = ROOT / "hooks" / "hooks.json"
 RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
+NOTES = json.loads((ROOT / "rules" / "rules.json").read_text()).get("primer_notes", [])
 
 spec = importlib.util.spec_from_file_location("wys", SCRIPT)
 assert spec and spec.loader
@@ -28,8 +29,11 @@ def run_cli(args=(), env_extra=None):
     env.update(env_extra or {})
     return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, timeout=20)
 
-PRIMER_MAX_LINE = 110    # chars per rule's primer
-PRIMER_MAX_TOTAL = 2400  # chars for all primers together (the injected block's size budget)
+PRIMER_MAX_LINE = 110    # chars per rule's primer / note line
+# 2026-11-18: raised 2400 -> 2900 to absorb the 3 primer_notes migrated from memory
+# (guard-block remedy, harness rm-in-bash-c, sandbox git/gh) — they move bytes from the always-
+# loaded MEMORY.md index to here, so the always-loaded total barely changes.
+PRIMER_MAX_TOTAL = 2900  # chars for all primers + notes together (the injected block's budget)
 
 
 def test_every_rule_has_a_primer_within_budget():
@@ -40,15 +44,21 @@ def test_every_rule_has_a_primer_within_budget():
         assert len(primer) <= PRIMER_MAX_LINE, \
             f"{rule['id']}: primer is {len(primer)} chars (max {PRIMER_MAX_LINE}): {primer!r}"
         total += len(primer)
+    for note in NOTES:
+        assert isinstance(note, str) and note.strip() and len(note) <= PRIMER_MAX_LINE, \
+            f"primer_note over budget: {note!r}"
+        total += len(note)
     assert total <= PRIMER_MAX_TOTAL, f"primers total {total} chars (budget {PRIMER_MAX_TOTAL})"
 
 
 def test_primer_lists_every_enabled_rule_for_the_shell():
-    text = wys.build_primer(RULES, shell="zsh", disabled=set())
+    text = wys.build_primer(RULES, shell="zsh", disabled=set(), notes=NOTES)
     assert text
     for rule in RULES:  # zsh excludes no rule (shells == [] means all shells)
         assert rule["primer"] in text, rule["id"]
-    assert "zsh/" in text and "git/" in text  # grouped by prefix
+    for note in NOTES:
+        assert note in text
+    assert "zsh/" in text and "git/" in text and "notes/" in text  # grouped by prefix
 
 
 def test_primer_cli_emits_session_start_json():
@@ -58,6 +68,8 @@ def test_primer_cli_emits_session_start_json():
     assert out["hookEventName"] == "SessionStart"
     for rule in RULES:
         assert rule["primer"] in out["additionalContext"]
+    for note in NOTES:
+        assert note in out["additionalContext"]
 
 
 def test_disable_all_prints_nothing():

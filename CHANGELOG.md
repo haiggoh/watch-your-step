@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.3] — 2026-11-18
+
+### Added — new rule `shell/grep-q-mid-pipe` + primer_notes (memory migration group A, plan 2026-11-18)
+- `grep -q` anywhere except the LAST stage of a pipeline always yields empty (-q suppresses stdout),
+  so the predicate is always false. New warn rule fires on `grep -q … | …` (also combined flags like
+  `-lq` and `--quiet`); `… | grep -q .` at the end and bare `grep -q pat file` stay quiet. Incident
+  2026-11-16: `grep -lq pat files | grep -v x` emptied a sudo-in-terminal `--verify`, which then
+  reported NOT_VERIFIED while the launch had succeeded. Tests: tests/test_grep_q_mid_pipe.py (7,
+  RED first) + flag/pass cases in tests/cases.json; mutation-tested per test_rules.py.
+- New `primer_notes` top-level in rules.json: primer-only lines for traps the guard does not match,
+  printed under a `notes/` group by `build_primer` (fail-open, never stalls session start). Carries the
+  migrated group-A notes: guard-block remedy (a blocked command ran NOTHING; WYS_ALLOW_* only on
+  explicit user say-so), harness rm-in-`bash -c` denial, sandbox git 100001 / gh -26276 meaning.
+  Primer budget 2400→2900 (bytes move from the always-loaded MEMORY.md index to here).
+
 ## [0.10.2] — 2026-11-16
 
 ### Changed — SessionStart primer prominence (user request 2026-11-16)

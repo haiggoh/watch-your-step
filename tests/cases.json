@@ -1,173 +1,1006 @@
 {
-  "_comment": "Every rule needs at least one should_flag and one should_pass case (tests enforce it). Commands are the tool input as the model writes it. HOMEUSER is replaced by the real user name and OTHERUSER by a near-miss of it at test time.",
-  "cases": [
-    {"rule": "tool/read-pages-non-pdf", "expect": "flag", "tool": "Read", "tool_input": {"file_path": "/x/src/EpisodeCard.tsx", "pages": "2"}},
-    {"rule": "tool/read-pages-non-pdf", "expect": "flag", "tool": "Read", "tool_input": {"file_path": "/x/notes.md", "pages": "1-3"}},
-    {"rule": "tool/read-pages-non-pdf", "expect": "pass", "tool": "Read", "tool_input": {"file_path": "/x/spec.PDF", "pages": "1-3"}},
-    {"rule": "tool/read-pages-non-pdf", "expect": "pass", "tool": "Read", "tool_input": {"file_path": "/x/src/EpisodeCard.tsx", "offset": 40, "limit": 30}},
-    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "waypoints.py edit x --point \"run `make test` first\""},
-    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "cat > notes.md <<EOF\nuse `rtk` here\nEOF"},
-    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit -m \"fix: the `foo` helper\""},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "waypoints.py edit x --point 'run `make test` first'"},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "cat > notes.md <<'EOF'\nuse `rtk` here, and \"quoted `spans`\" too\nEOF"},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "echo \"escaped \\`span\\` stays literal\""},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "d=`date +%F`; echo \"$d\""},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "git commit -m \"fix: a $(echo ok) thing\" # wys:allow shell/backtick-in-dquote `x`"},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "echo \"use `rtk` here\" # wys:allow shell/backtick-in-dquote"},
-    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit --allow-empty -m \"see # wys:allow shell/backtick-in-dquote\" && echo \"use `rtk` here\""},
-    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "cat > n.md <<EOF\n# wys:allow shell/backtick-in-dquote\nuse `rtk` here\nEOF"},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "git commit -m \"$(cat <<'EOF'\nfix: the `foo` helper costs $40 (see `bar`)\nEOF\n)\""},
-    {"rule": "shell/backtick-in-dquote", "expect": "pass", "tool": "Bash", "command": "gh pr create --title \"t\" --body \"$(cat <<'EOF'\n## The bug\n| a | `b` |\nEOF\n)\" && echo done"},
-    {"rule": "shell/backtick-in-dquote", "expect": "flag", "tool": "Bash", "command": "git commit -m \"$(cat <<EOF\nfix: the `foo` helper\nEOF\n)\""},
-    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "echo \"version: $(python3 -c \"import json;print(json.load(open('p.json'))['version'])\")\"; echo \"=== surfaces ===\""},
-    {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "x=\"$(echo hi)\"; echo ===="},
-    {"rule": "shell/dollar-digit-in-dquote", "expect": "pass", "tool": "Bash", "command": "gh pr create --body \"$(cat <<'EOF'\ncosts $40 a day\nEOF\n)\""},
-
-    {"rule": "shell/dollar-digit-in-dquote", "expect": "flag", "tool": "Bash", "command": "waypoints.py add \"budget is $40 per day\""},
-    {"rule": "shell/dollar-digit-in-dquote", "expect": "pass", "tool": "Bash", "command": "waypoints.py add 'budget is $40 per day'"},
-    {"rule": "shell/dollar-digit-in-dquote", "expect": "pass", "tool": "Bash", "command": "waypoints.py add \"budget is \\$40 per day\""},
-
-    {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "ls /Users/OTHERUSER/ClaudeWorkspace/cost-tracker"},
-    {"rule": "path/home-typo", "expect": "flag", "tool": "Read", "file_path": "/Users/OTHERUSER/.claude/projects/x/memory/a.md"},
-    {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "cat ~/.claude/projects/-Users-OTHERUSER/memory/a.md"},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "python3 -c 'fixture = \"-Users-me-proj\"'"},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "waypoints.py add \"note about the -Users-me-proj fixture slug\""},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/HOMEUSER/ClaudeWorkspace ~/x $HOME/y"},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Read", "file_path": "/Users/HOMEUSER/.claude/CLAUDE.md"},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "ls /Users/Shared/x"},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "cat ~/.claude/projects/-Users-HOMEUSER-ClaudeWorkspace-echoprism/x.jsonl"},
-    {"rule": "path/home-typo", "expect": "pass", "tool": "Bash", "command": "audit-scan.py --project \"-Users-HOMEUSER$\" --lessons"},
-    {"rule": "path/home-typo", "expect": "flag", "tool": "Bash", "command": "audit-scan.py --project \"-Users-OTHERUSER$\" --lessons"},
-
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "sed 's/a/b/' config.txt > config.txt"},
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "cat notes.md | grep -v x > notes.md"},
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "python3 -c \"open(p,'w').write(open(p).read().replace('a','b'))\""},
-    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' config.txt > config.txt.tmp && mv config.txt.tmp config.txt"},
-    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "sort a.txt >> a.txt.log; cmd 2>&1 > out.txt"},
-    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "python3 -c \"s=open(p).read(); open(p,'w').write(s.replace('a','b'))\""},
-    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "cd ~/ClaudeWorkspace/echoprism && cp src/components/feed/EpisodeCard.tsx /tmp/ec.new && git show HEAD:src/components/feed/EpisodeCard.tsx > src/components/feed/EpisodeCard.tsx"},
-    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "echo a > a && git add -A && git commit -qm a"},
-    {"rule": "shell/truncate-before-read", "expect": "pass", "tool": "Bash", "command": "printf x > x"},
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "cat X | sort > X"},
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "sort X > X"},
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "grep p X > X; echo done"},
-    {"rule": "shell/truncate-before-read", "expect": "flag", "tool": "Bash", "command": "echo start; sort cfg > cfg"},
-
-    {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "ls; echo ====; ls -la"},
-    {"rule": "zsh/equals-word", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "[ \"$a\" == \"b\" ] && echo same"},
-    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "ls; echo '===='; echo \"====\"; echo ----"},
-    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "[[ $a == b ]] && x=1 && git log --format=%H a=b"},
-    {"rule": "zsh/equals-word", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "echo ===="},
-
-    {"rule": "zsh/pipestatus", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "pytest | tail -3; echo \"exit ${PIPESTATUS[0]}\""},
-    {"rule": "zsh/pipestatus", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "pytest | tail -3; echo \"exit $pipestatus[1]\""},
-    {"rule": "zsh/pipestatus", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "pytest | tail -3; echo \"exit ${PIPESTATUS[0]}\""},
-
-    {"rule": "shell/grep-F-anchor", "expect": "flag", "tool": "Bash", "command": "grep -F '^## [0.4' CHANGELOG.md"},
-    {"rule": "shell/grep-F-anchor", "expect": "flag", "tool": "Bash", "command": "grep -qF \"^version\" plugin.json"},
-    {"rule": "shell/grep-F-anchor", "expect": "pass", "tool": "Bash", "command": "grep -F '## [0.4' CHANGELOG.md; grep -E '^## ' CHANGELOG.md"},
-
-    {"rule": "zsh/unquoted-var-for", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "files=$(git ls-files); for f in $files; do wc -l $f; done"},
-    {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "for f in ${=files}; do wc -l $f; done; for f in a b; do :; done"},
-    {"rule": "zsh/unquoted-var-for", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "for f in $files; do wc -l $f; done"},
-
-    {"rule": "zsh/unmatched-glob", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "ls *.wys-no-such-files.zzz"},
-    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "find . -name '*.log' -exec grep -l foo {} +"},
-    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "rm *.log(N)"},
-    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "setopt NULL_GLOB; ls *.wys-no-such-files.zzz"},
-    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "case $args in *\"/var/folders/\"*) echo hit;; *) echo no;; esac"},
-    {"rule": "zsh/unmatched-glob", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "ls *.wys-no-such-files.zzz"},
-
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps aux"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps auxww"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -ef"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -o args -p 1"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -o pid,command -p 1"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "pgrep -a claude"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "pgrep -fl python"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps aux | grep claude"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "ps -o pid,lstart,comm -p 123"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep -x claude"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep claude"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "echo ps aux; ls"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pids=$(pgrep -x foo); ps -o pid,comm -p $pids"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "echo \"port $p: pid $pid ($(ps -o command= -p $pid | cut -c1-60))\""},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -axo etime,command | head -12"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "ps -o lstart= -p $pid"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep -f \"litellm --config\" | wc -l"},
-
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat $roots 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "cat $files 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "ls $dirs 2>/dev/null; rm $targets 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "wc -l $files 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat ${=roots} 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -r x \"$f\" 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -r x $arr[@] 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "for f in a b; do cat $f 2>/dev/null; done"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "cat $HOME/notes/x 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "bash", "command": "cat $files 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "cat > s.sh <<'EOF'\n#!/bin/bash\ncat $files 2>/dev/null\nEOF"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "cat $files"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE --include=\"*.md\" \"$pat\" $roots 2>/dev/null"},
-
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -e -f | grep claude"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps ax | grep claude"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -ax"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "ps -o pid,cmd -p 1"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "sudo -u root ps aux"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "time ps aux"},
-    {"rule": "secrets/ps-argv", "expect": "flag", "tool": "Bash", "command": "pgrep --list-full claude"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep -l claude"},
-    {"rule": "secrets/ps-argv", "expect": "pass", "tool": "Bash", "command": "pgrep --list claude"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat ${roots} 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -r x $f 2>/dev/null; for f in a b; do :; done"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat $roots >/dev/null 2>&1"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "dirs=(src tests); grep -rliE pat $dirs 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -r x ${arr[@]} 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "echo cat $files 2>/dev/null"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "pass", "tool": "Bash", "shell": "zsh", "command": "grep -rliE pat $roots 2>err.log"},
-    {"rule": "zsh/unquoted-var-arglist", "expect": "flag", "tool": "Bash", "shell": "zsh", "command": "dirs=\"src tests\"; grep -rliE pat $dirs 2>/dev/null"},
-
-    {"rule": "claude/headless-loads-mcp", "expect": "flag", "tool": "Bash", "command": "claude -p \"summarise the diff\" --model haiku"},
-    {"rule": "claude/headless-loads-mcp", "expect": "flag", "tool": "Bash", "command": "cd /tmp/x && claude --model haiku -p 'ping' --max-turns 1"},
-    {"rule": "claude/headless-loads-mcp", "expect": "flag", "tool": "Bash", "command": "env FOO=1 claude --print hello > out.txt"},
-    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude -p 'ping' --strict-mcp-config --mcp-config '{\"mcpServers\":{}}'"},
-    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude --strict-mcp-config --mcp-config x.json -p 'ping'"},
-    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude --resume abc123"},
-    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "echo \"run claude -p later\" && grep -rn 'claude -p' ~/.claude/scripts"},
-    {"rule": "claude/headless-loads-mcp", "expect": "pass", "tool": "Bash", "command": "claude -p 'needs the mcp tools' # wys:allow claude/headless-loads-mcp"},
-
-    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git add -A"},
-    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git add --all && git commit -m 'wip'"},
-    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git add ."},
-    {"rule": "git/add-all", "expect": "flag", "tool": "Bash", "command": "git -C ../sibling-repo add -A"},
-    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git add src/a.py tests/b.py"},
-    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git add -p"},
-    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git add ./src/a.py ./docs"},
-    {"rule": "git/add-all", "expect": "pass", "tool": "Bash", "command": "git commit -m \"never git add -A here\""},
-
-    {"rule": "shell/awk-nr1-batched-find", "expect": "flag", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'NR==1 {print FILENAME}' {} +"},
-    {"rule": "shell/awk-nr1-batched-find", "expect": "flag", "tool": "Bash", "command": "find d -type f -exec awk 'NR == 1 && /^---/ {fm=1}' {} + | wc -l"},
-    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'FNR==1 {print FILENAME}' {} +"},
-    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "find . -name '*.md' -exec awk 'NR==1 {print}' {} \\;"},
-    {"rule": "shell/awk-nr1-batched-find", "expect": "pass", "tool": "Bash", "command": "awk 'NR==1' file.txt"},
-    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "for m in 's/a/b/' 's/c/d/'; do cp /tmp/good.py bin/x.py; sed -i '' \"$m\" bin/x.py; $PY -m pytest tests/test_x.py -q > /tmp/mut.txt 2>&1; echo $?; done"},
-    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "sed -i.bak 's/1/2/' src/mod.py && pytest -q tests/"},
-    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "sed -Ei 's/x/y/' a.py; python3 -m pytest"},
-    {"rule": "python/mutation-stale-pyc", "expect": "flag", "tool": "Bash", "command": "perl -pi -e 's/1/2/' mod.py; pytest -x"},
-    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "export PYTHONDONTWRITEBYTECODE=1; sed -i '' 's/a/b/' x.py; pytest -q"},
-    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed -i '' 's/a/b/' x.py; python3 -B -m pytest -q"},
-    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed -i '' 's/a/b/' config.txt && git diff"},
-    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "pytest -q tests/test_x.py"},
-    {"rule": "python/mutation-stale-pyc", "expect": "pass", "tool": "Bash", "command": "sed 's/a/b/' x.py > /tmp/y.py; pytest -q"},
-    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "pytest -q | tail -3 && git commit -m x"},
-    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "bash tests/test_x.sh | grep -c ok; echo rc=$?"},
-    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "go test ./... | tail -5 || echo failed"},
-    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "pytest -q | tail -6 &"},
-    {"rule": "shell/pipe-hides-exit", "expect": "flag", "tool": "Bash", "command": "python3 -m pytest tests/ | tee log | tail -3 && echo done"},
-    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "pytest -q | tail -3"},
-    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "set -o pipefail; pytest -q | tail -3 && echo ok"},
-    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "pytest -q > log 2>&1; echo EXIT:$?"},
-    {"rule": "shell/pipe-hides-exit", "expect": "pass", "tool": "Bash", "command": "cat out.txt | tail -3 && echo done"}
-  ]
+ "_comment": "Every rule needs at least one should_flag and one should_pass case (tests enforce it). Commands are the tool input as the model writes it. HOMEUSER is replaced by the real user name and OTHERUSER by a near-miss of it at test time.",
+ "cases": [
+  {
+   "rule": "tool/read-pages-non-pdf",
+   "expect": "flag",
+   "tool": "Read",
+   "tool_input": {
+    "file_path": "/x/src/EpisodeCard.tsx",
+    "pages": "2"
+   }
+  },
+  {
+   "rule": "tool/read-pages-non-pdf",
+   "expect": "flag",
+   "tool": "Read",
+   "tool_input": {
+    "file_path": "/x/notes.md",
+    "pages": "1-3"
+   }
+  },
+  {
+   "rule": "tool/read-pages-non-pdf",
+   "expect": "pass",
+   "tool": "Read",
+   "tool_input": {
+    "file_path": "/x/spec.PDF",
+    "pages": "1-3"
+   }
+  },
+  {
+   "rule": "tool/read-pages-non-pdf",
+   "expect": "pass",
+   "tool": "Read",
+   "tool_input": {
+    "file_path": "/x/src/EpisodeCard.tsx",
+    "offset": 40,
+    "limit": 30
+   }
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "waypoints.py edit x --point \"run `make test` first\""
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "cat > notes.md <<EOF\nuse `rtk` here\nEOF"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git commit -m \"fix: the `foo` helper\""
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "waypoints.py edit x --point 'run `make test` first'"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "cat > notes.md <<'EOF'\nuse `rtk` here, and \"quoted `spans`\" too\nEOF"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "echo \"escaped \\`span\\` stays literal\""
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "d=`date +%F`; echo \"$d\""
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "git commit -m \"fix: a $(echo ok) thing\" # wys:allow shell/backtick-in-dquote `x`"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "echo \"use `rtk` here\" # wys:allow shell/backtick-in-dquote"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git commit --allow-empty -m \"see # wys:allow shell/backtick-in-dquote\" && echo \"use `rtk` here\""
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "cat > n.md <<EOF\n# wys:allow shell/backtick-in-dquote\nuse `rtk` here\nEOF"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "git commit -m \"$(cat <<'EOF'\nfix: the `foo` helper costs $40 (see `bar`)\nEOF\n)\""
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "gh pr create --title \"t\" --body \"$(cat <<'EOF'\n## The bug\n| a | `b` |\nEOF\n)\" && echo done"
+  },
+  {
+   "rule": "shell/backtick-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git commit -m \"$(cat <<EOF\nfix: the `foo` helper\nEOF\n)\""
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "echo \"version: $(python3 -c \"import json;print(json.load(open('p.json'))['version'])\")\"; echo \"=== surfaces ===\""
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "x=\"$(echo hi)\"; echo ===="
+  },
+  {
+   "rule": "shell/dollar-digit-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "gh pr create --body \"$(cat <<'EOF'\ncosts $40 a day\nEOF\n)\""
+  },
+  {
+   "rule": "shell/dollar-digit-in-dquote",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "waypoints.py add \"budget is $40 per day\""
+  },
+  {
+   "rule": "shell/dollar-digit-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "waypoints.py add 'budget is $40 per day'"
+  },
+  {
+   "rule": "shell/dollar-digit-in-dquote",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "waypoints.py add \"budget is \\$40 per day\""
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ls /Users/OTHERUSER/ClaudeWorkspace/cost-tracker"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "flag",
+   "tool": "Read",
+   "file_path": "/Users/OTHERUSER/.claude/projects/x/memory/a.md"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "cat ~/.claude/projects/-Users-OTHERUSER/memory/a.md"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "python3 -c 'fixture = \"-Users-me-proj\"'"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "waypoints.py add \"note about the -Users-me-proj fixture slug\""
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "ls /Users/HOMEUSER/ClaudeWorkspace ~/x $HOME/y"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Read",
+   "file_path": "/Users/HOMEUSER/.claude/CLAUDE.md"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "ls /Users/Shared/x"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "cat ~/.claude/projects/-Users-HOMEUSER-ClaudeWorkspace-echoprism/x.jsonl"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "audit-scan.py --project \"-Users-HOMEUSER$\" --lessons"
+  },
+  {
+   "rule": "path/home-typo",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "audit-scan.py --project \"-Users-OTHERUSER$\" --lessons"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "sed 's/a/b/' config.txt > config.txt"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "cat notes.md | grep -v x > notes.md"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "python3 -c \"open(p,'w').write(open(p).read().replace('a','b'))\""
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "sed 's/a/b/' config.txt > config.txt.tmp && mv config.txt.tmp config.txt"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "sort a.txt >> a.txt.log; cmd 2>&1 > out.txt"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "python3 -c \"s=open(p).read(); open(p,'w').write(s.replace('a','b'))\""
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "cd ~/ClaudeWorkspace/echoprism && cp src/components/feed/EpisodeCard.tsx /tmp/ec.new && git show HEAD:src/components/feed/EpisodeCard.tsx > src/components/feed/EpisodeCard.tsx"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "echo a > a && git add -A && git commit -qm a"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "printf x > x"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "cat X | sort > X"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "sort X > X"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "grep p X > X; echo done"
+  },
+  {
+   "rule": "shell/truncate-before-read",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "echo start; sort cfg > cfg"
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "ls; echo ====; ls -la"
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "[ \"$a\" == \"b\" ] && echo same"
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "ls; echo '===='; echo \"====\"; echo ----"
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "[[ $a == b ]] && x=1 && git log --format=%H a=b"
+  },
+  {
+   "rule": "zsh/equals-word",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "bash",
+   "command": "echo ===="
+  },
+  {
+   "rule": "zsh/pipestatus",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "pytest | tail -3; echo \"exit ${PIPESTATUS[0]}\""
+  },
+  {
+   "rule": "zsh/pipestatus",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "pytest | tail -3; echo \"exit $pipestatus[1]\""
+  },
+  {
+   "rule": "zsh/pipestatus",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "bash",
+   "command": "pytest | tail -3; echo \"exit ${PIPESTATUS[0]}\""
+  },
+  {
+   "rule": "shell/grep-F-anchor",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "grep -F '^## [0.4' CHANGELOG.md"
+  },
+  {
+   "rule": "shell/grep-F-anchor",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "grep -qF \"^version\" plugin.json"
+  },
+  {
+   "rule": "shell/grep-F-anchor",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "grep -F '## [0.4' CHANGELOG.md; grep -E '^## ' CHANGELOG.md"
+  },
+  {
+   "rule": "zsh/unquoted-var-for",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "files=$(git ls-files); for f in $files; do wc -l $f; done"
+  },
+  {
+   "rule": "zsh/unquoted-var-for",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "for f in ${=files}; do wc -l $f; done; for f in a b; do :; done"
+  },
+  {
+   "rule": "zsh/unquoted-var-for",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "bash",
+   "command": "for f in $files; do wc -l $f; done"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "ls *.wys-no-such-files.zzz"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "find . -name '*.log' -exec grep -l foo {} +"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "rm *.log(N)"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "setopt NULL_GLOB; ls *.wys-no-such-files.zzz"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "case $args in *\"/var/folders/\"*) echo hit;; *) echo no;; esac"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "bash",
+   "command": "ls *.wys-no-such-files.zzz"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps aux"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps auxww"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -ef"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -o args -p 1"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -o pid,command -p 1"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "pgrep -a claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "pgrep -fl python"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps aux | grep claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "ps -o pid,lstart,comm -p 123"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pgrep -x claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pgrep claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "echo ps aux; ls"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pids=$(pgrep -x foo); ps -o pid,comm -p $pids"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "echo \"port $p: pid $pid ($(ps -o command= -p $pid | cut -c1-60))\""
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -axo etime,command | head -12"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "ps -o lstart= -p $pid"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pgrep -f \"litellm --config\" | wc -l"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -rliE pat $roots 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "cat $files 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "ls $dirs 2>/dev/null; rm $targets 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "wc -l $files 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -rliE pat ${=roots} 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -r x \"$f\" 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -r x $arr[@] 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "for f in a b; do cat $f 2>/dev/null; done"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "cat $HOME/notes/x 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "bash",
+   "command": "cat $files 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "cat > s.sh <<'EOF'\n#!/bin/bash\ncat $files 2>/dev/null\nEOF"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "cat $files"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -rliE --include=\"*.md\" \"$pat\" $roots 2>/dev/null"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -e -f | grep claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps ax | grep claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -ax"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "ps -o pid,cmd -p 1"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "sudo -u root ps aux"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "time ps aux"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "pgrep --list-full claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pgrep -l claude"
+  },
+  {
+   "rule": "secrets/ps-argv",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pgrep --list claude"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -rliE pat ${roots} 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -r x $f 2>/dev/null; for f in a b; do :; done"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -rliE pat $roots >/dev/null 2>&1"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "dirs=(src tests); grep -rliE pat $dirs 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -r x ${arr[@]} 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "echo cat $files 2>/dev/null"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "grep -rliE pat $roots 2>err.log"
+  },
+  {
+   "rule": "zsh/unquoted-var-arglist",
+   "expect": "flag",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "dirs=\"src tests\"; grep -rliE pat $dirs 2>/dev/null"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "claude -p \"summarise the diff\" --model haiku"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "cd /tmp/x && claude --model haiku -p 'ping' --max-turns 1"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "env FOO=1 claude --print hello > out.txt"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "claude -p 'ping' --strict-mcp-config --mcp-config '{\"mcpServers\":{}}'"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "claude --strict-mcp-config --mcp-config x.json -p 'ping'"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "claude --resume abc123"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "echo \"run claude -p later\" && grep -rn 'claude -p' ~/.claude/scripts"
+  },
+  {
+   "rule": "claude/headless-loads-mcp",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "claude -p 'needs the mcp tools' # wys:allow claude/headless-loads-mcp"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git add -A"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git add --all && git commit -m 'wip'"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git add ."
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "git -C ../sibling-repo add -A"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "git add src/a.py tests/b.py"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "git add -p"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "git add ./src/a.py ./docs"
+  },
+  {
+   "rule": "git/add-all",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "git commit -m \"never git add -A here\""
+  },
+  {
+   "rule": "shell/awk-nr1-batched-find",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "find . -name '*.md' -exec awk 'NR==1 {print FILENAME}' {} +"
+  },
+  {
+   "rule": "shell/awk-nr1-batched-find",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "find d -type f -exec awk 'NR == 1 && /^---/ {fm=1}' {} + | wc -l"
+  },
+  {
+   "rule": "shell/awk-nr1-batched-find",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "find . -name '*.md' -exec awk 'FNR==1 {print FILENAME}' {} +"
+  },
+  {
+   "rule": "shell/awk-nr1-batched-find",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "find . -name '*.md' -exec awk 'NR==1 {print}' {} \\;"
+  },
+  {
+   "rule": "shell/awk-nr1-batched-find",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "awk 'NR==1' file.txt"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "for m in 's/a/b/' 's/c/d/'; do cp /tmp/good.py bin/x.py; sed -i '' \"$m\" bin/x.py; $PY -m pytest tests/test_x.py -q > /tmp/mut.txt 2>&1; echo $?; done"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "sed -i.bak 's/1/2/' src/mod.py && pytest -q tests/"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "sed -Ei 's/x/y/' a.py; python3 -m pytest"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "perl -pi -e 's/1/2/' mod.py; pytest -x"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "export PYTHONDONTWRITEBYTECODE=1; sed -i '' 's/a/b/' x.py; pytest -q"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "sed -i '' 's/a/b/' x.py; python3 -B -m pytest -q"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "sed -i '' 's/a/b/' config.txt && git diff"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pytest -q tests/test_x.py"
+  },
+  {
+   "rule": "python/mutation-stale-pyc",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "sed 's/a/b/' x.py > /tmp/y.py; pytest -q"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "pytest -q | tail -3 && git commit -m x"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "bash tests/test_x.sh | grep -c ok; echo rc=$?"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "go test ./... | tail -5 || echo failed"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "pytest -q | tail -6 &"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "python3 -m pytest tests/ | tee log | tail -3 && echo done"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pytest -q | tail -3"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "set -o pipefail; pytest -q | tail -3 && echo ok"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "pytest -q > log 2>&1; echo EXIT:$?"
+  },
+  {
+   "rule": "shell/pipe-hides-exit",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "cat out.txt | tail -3 && echo done"
+  },
+  {
+   "rule": "shell/grep-q-mid-pipe",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "grep -lq pat files | grep -v x"
+  },
+  {
+   "rule": "shell/grep-q-mid-pipe",
+   "expect": "flag",
+   "tool": "Bash",
+   "command": "grep --quiet foo input | wc -l"
+  },
+  {
+   "rule": "shell/grep-q-mid-pipe",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "ls | grep -q pat"
+  },
+  {
+   "rule": "shell/grep-q-mid-pipe",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "grep -q pat file"
+  }
+ ]
 }
