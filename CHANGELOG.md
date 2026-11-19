@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.10.4] — 2026-11-19
+
+### Added — `tool/shell-tool-casing` rule + primer line: the shell tool is `Bash` (capital B); a lowercase `bash` call fails with `No such tool available: bash`
+- Fires on the tool NAME (consulted before the Bash/non-Bash branch split in evaluate()), block severity, primer line ships in every session, flag/pass cases + mutation test in cases.json. Recurring free-lane slip (2026-11-03, 2026-11-19). Removed from CLAUDE.md per user — the primer is now the rule's home. Suite: 403 passed.
+
 ## [0.10.3] — 2026-11-18
 
 ### Added — new rule `shell/grep-q-mid-pipe` + primer_notes (memory migration group A, plan 2026-11-18)

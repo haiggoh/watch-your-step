@@ -478,6 +478,22 @@
    "fix": "make -q the LAST stage of the pipeline, or capture to a variable first: `... | xargs grep -l pat | grep -v x | grep -q .`",
    "primer": "grep -q mid-pipe always yields empty (-q suppresses stdout); make -q the LAST pipe stage.",
    "incident": "2026-11-16, sudo-in-terminal --verify: `grep -lq pat files | grep -v x` always empty"
+  },
+  {
+   "id": "tool/shell-tool-casing",
+   "severity": "block",
+   "tools": [
+    "*"
+   ],
+   "shells": [],
+   "context": [
+    "raw"
+   ],
+   "message": "the shell tool is named 'Bash' with a capital B — a lowercase 'bash' call fails with 'No such tool available: bash. Tool names are case-sensitive: call Bash instead.' (recurred 2026-11-03 and 2026-11-19 on free lanes despite CLAUDE.md; the primer is the prevention channel)",
+   "fix": "retry once with 'Bash' (capital B) on the 'No such tool available' error; never retry other casings",
+   "primer": "The shell tool is 'Bash' (capital B), never 'bash' — on 'No such tool available: bash' retry once with 'Bash'.",
+   "incident": "2026-11-03 free lane; still recurring 2026-11-19",
+   "pattern": "^bash$"
   }
  ],
  "primer_notes": [

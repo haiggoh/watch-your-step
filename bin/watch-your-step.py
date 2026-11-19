@@ -1515,8 +1515,18 @@ def evaluate(tool, tool_input, shell=None, user=None, rules=None, cwd=None, stri
         allowed = set()
         lit_view = path
     hits = []
+    # 2026-11-19: tool/shell-tool-casing matches on the TOOL NAME, not the command text, so it
+    # must be consulted before the Bash/non-Bash branch split below (a lowercase 'bash' never
+    # reaches the Bash branch). tools ["*"] means every tool name is checked.
+    for rule in rules:
+        if rule["id"] == "tool/shell-tool-casing" and rule["id"] not in disabled:
+            if "*" in rule["tools"] or tool in rule["tools"]:
+                if re.search(rule["pattern"], str(tool)):
+                    hits.append({**rule, "detail": "tool name"})
     for rule in rules:
         rid = rule["id"]
+        if rule["id"] == "tool/shell-tool-casing":
+            continue
         if tool not in rule["tools"] or rid in disabled or rid in allowed:
             continue
         if rule["shells"] and shell not in rule["shells"]:

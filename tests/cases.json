@@ -1001,6 +1001,18 @@
    "expect": "pass",
    "tool": "Bash",
    "command": "grep -q pat file"
+  },
+  {
+   "rule": "tool/shell-tool-casing",
+   "expect": "flag",
+   "tool": "bash",
+   "command": "ls"
+  },
+  {
+   "rule": "tool/shell-tool-casing",
+   "expect": "pass",
+   "tool": "Bash",
+   "command": "ls"
   }
  ]
 }
