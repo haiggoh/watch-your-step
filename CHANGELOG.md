@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.7] — 2026-11-25
+
+### Added — `python/pytest-n-without-xdist` (block): `python3 -m pytest -n` where that Python has no xdist
+- pytest exits 4 (usage error: unrecognized `-n`) before collecting anything, and the 4 read off
+  a log or pipeline looks like a test verdict. Recurred twice on 2026-11-25 despite a memory note.
+- Stateful: the check live-probes the NAMED interpreter (`<interp> -c "import xdist"`, 5 s cap), so
+  it fires only where the trap is real — a machine whose `python3` has xdist never sees it. Fails
+  open when the interpreter cannot be resolved or the probe errors. Covers `-n N`, `-nN`, `-n=N`,
+  `--numprocesses[=N]`, env prefixes, interpreter flags (`-B`), and later `&&`/`;`/`|` links.
+- Tests: `tests/test_pytest_n_xdist.py`, 9 hermetic cases against stub interpreters (5 red first;
+  3 mutants killed: probe result ignored, flag regex narrowed, PATH resolution dropped).
+
 ## [0.10.6] — 2026-11-25
 
 ### Fixed — `scripts/build-portable.py` is executable (mode 100644 → 100755)

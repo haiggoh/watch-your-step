@@ -329,6 +329,54 @@ def check_python_shebang_mismatch(texts, bare_view, cwd=None, **_):
     return False
 
 
+XDIST_FLAG = re.compile(r"^(?:-n\S*|--numprocesses(?:=\S*)?)$")
+
+
+def _lacks_xdist(interp, cwd):
+    """True only when the named interpreter is found AND provably cannot import xdist.
+    Fail open: unresolvable, unrunnable or slow (>5 s) probes give NO verdict, never a guess."""
+    import shutil
+    import subprocess
+    if "/" in interp:
+        p = os.path.expanduser(interp)
+        if not os.path.isabs(p):
+            p = os.path.join(cwd or os.getcwd(), p)
+        path = p if os.path.isfile(p) and os.access(p, os.X_OK) else None
+    else:
+        path = shutil.which(interp)
+    if not path:
+        return False
+    try:
+        r = subprocess.run([path, "-c", "import xdist"], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode != 0
+
+
+def check_pytest_n_without_xdist(texts, bare_view, cwd=None, **_):
+    """`<python> -m pytest … -n N` where THAT interpreter lacks pytest-xdist: pytest exits 4
+    (usage error) before collecting anything, and the 4 reads like a test verdict. The PATH
+    `pytest` is often a different venv that HAS xdist, so only a live probe of the named
+    interpreter can tell — a pure pattern would block machines where the command is fine."""
+    for chain in re.split(r"&&|\|\||[;|\n]", bare_view):
+        words = chain.split()
+        while words and (re.match(r"^\w+=", words[0]) or words[0] in ("sudo", "env")):
+            words = words[1:]
+        if not words or not PY_RUN.match(os.path.basename(words[0])):
+            continue
+        rest = words[1:]
+        try:
+            m = rest.index("-m")
+        except ValueError:
+            continue
+        if m + 1 >= len(rest) or rest[m + 1] != "pytest":
+            continue
+        if any(XDIST_FLAG.match(w) for w in rest[m + 2:]) and _lacks_xdist(words[0], cwd):
+            return True
+    return False
+
+
 # ---- state-aware git checks: they look at the repo itself, so they only fire when the trap is real --
 
 MARKER = re.compile(r"^(?:<{7}|>{7})(?: |$)", re.M)
@@ -1202,6 +1250,7 @@ CHECKS = {
     "branch_delete_unrecoverable": check_branch_delete_unrecoverable,
     "discards_uncommitted": check_discards_uncommitted,
     "python_shebang_mismatch": check_python_shebang_mismatch,
+    "pytest_n_without_xdist": check_pytest_n_without_xdist,
 }
 
 
