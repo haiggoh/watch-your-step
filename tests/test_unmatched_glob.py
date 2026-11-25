@@ -31,13 +31,47 @@ def test_a_matching_stage_keeps_a_compound_command_quiet(tmp_path):
     assert not fired("ls; cat *.md", tmp_path)
 
 
-def test_nullglob_qualifier_is_respected(tmp_path):
+# ---- (N) is NOT a null-glob qualifier in the Bash tool ----
+# Measured 2026-11-25 in Claude Code's Bash tool (zsh 5.9): bareglobqual is OFF there (plain
+# `zsh -ic` has it on, the snapshot never touches it, so the tool's eval wrapper turns it off).
+# Without it `*.json(N)` is a plain pattern with a group, i.e. "ends in .jsonN", and NOMATCH
+# aborts it -- even when 19 real *.json files existed. The rule used to call it null-globbed.
+
+def test_n_qualifier_without_bareglobqual_is_a_literal_pattern_and_warns(tmp_path):
     (tmp_path / "a.log").write_text("x")
-    assert not fired("rm *.md(N)", tmp_path)
+    assert fired("rm *.md(N)", tmp_path)
+
+
+def test_n_qualifier_warns_even_when_the_unqualified_glob_matches(tmp_path):
+    (tmp_path / "b.md").write_text("x")          # the measured shape: real files, still aborted
+    assert fired("cat *.md(N)", tmp_path)
+
+
+def test_n_group_is_judged_as_the_literal_it_means(tmp_path):
+    (tmp_path / "x.mdN").write_text("x")         # positive control: the group DOES match this
+    assert not fired("cat *.md(N)", tmp_path)
+
+
+def test_setopt_bareglobqual_restores_the_qualifier(tmp_path):
+    assert not fired("setopt bareglobqual; rm *.md(N)", tmp_path)
+    assert not fired("setopt BARE_GLOB_QUAL; rm *.md(N)", tmp_path)
 
 
 def test_setopt_null_glob_disables_the_check(tmp_path):
     assert not fired("setopt NULL_GLOB; ls *.zzz-absent", tmp_path)
+
+
+def test_setopt_null_glob_is_matched_in_any_spelling_zsh_accepts(tmp_path):
+    # zsh option names ignore case and underscores (measured: `setopt nullglob` works)
+    assert not fired("setopt nullglob; ls *.zzz-absent", tmp_path)
+    assert not fired("setopt null_glob; ls *.zzz-absent", tmp_path)
+
+
+def test_rule_text_no_longer_recommends_the_n_qualifier():
+    rule = next(r for r in RULES if r["id"] == "zsh/unmatched-glob")
+    assert "add the (N) glob qualifier" not in rule["fix"]
+    assert "bareglobqual" in rule["fix"] and "NULL_GLOB" in rule["fix"]
+    assert "add (N)" not in rule["primer"] and "NULL_GLOB" in rule["primer"]
 
 
 def test_quoted_pattern_never_fires(tmp_path):

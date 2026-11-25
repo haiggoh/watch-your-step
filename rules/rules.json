@@ -209,8 +209,8 @@
    ],
    "check": "unmatched_glob",
    "message": "a bare glob that matches nothing ABORTS the command it belongs to and its whole pipeline: the only output is '(eval):N: no matches found', and the other stages of that pipeline silently never execute (an earlier ;-separated statement has already run).",
-   "fix": "quote the pattern when the TOOL should expand it (find . -name '*.log', grep --include), add the (N) glob qualifier, or setopt NULL_GLOB in the same command",
-   "primer": "A bare glob matching nothing aborts its whole pipeline; quote it or add (N).",
+   "fix": "quote the pattern when the TOOL should expand it (find . -name '*.log', grep --include), or put setopt NULL_GLOB earlier in the same command. Do NOT reach for (N): the Bash tool runs zsh with bareglobqual off, so *.log(N) means 'ends in .logN' and aborts as well; setopt bareglobqual first if you really need a qualifier",
+   "primer": "A bare glob matching nothing aborts its pipeline; quote it or setopt NULL_GLOB first. (N) fails here too.",
    "incident": "2026-10-20, a find A /tmp/la-* probe was killed by its glob and the empty output nearly read as 'no logs exist'"
   },
   {

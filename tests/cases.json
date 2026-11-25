@@ -415,10 +415,17 @@
   },
   {
    "rule": "zsh/unmatched-glob",
-   "expect": "pass",
+   "expect": "flag",
    "tool": "Bash",
    "shell": "zsh",
    "command": "rm *.log(N)"
+  },
+  {
+   "rule": "zsh/unmatched-glob",
+   "expect": "pass",
+   "tool": "Bash",
+   "shell": "zsh",
+   "command": "setopt bareglobqual; rm *.log(N)"
   },
   {
    "rule": "zsh/unmatched-glob",

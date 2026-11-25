@@ -630,7 +630,8 @@ STATEMENT_BLOCK = {"for", "select", "done", "fi", "esac", "}", ")", "in"}
 # Commands that create no files, so the filesystem the hook sees is the one the glob will see.
 READ_ONLY_COMMANDS = {"cd", "ls", "echo", "printf", "cat", "grep", "egrep", "head", "tail", "wc",
                       "stat", "pwd", "true", "false", "test", "[", "sort", "uniq", "date", "which",
-                      "type", "file", "du", "df", "diff", "cmp", "sleep", "pgrep", "export", "find"}
+                      "type", "file", "du", "df", "diff", "cmp", "sleep", "pgrep", "export", "find",
+                      "setopt", "unsetopt"}
 FIND_WRITES = re.compile(r"(^|\s)-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)\b")
 WRITE_REDIRECT = re.compile(r">>?(?!&)(?!\s*/dev/null)")
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -666,11 +667,17 @@ def check_unmatched_glob(texts, bare_view, cwd=None, **_):
     needs: such a glob gets no verdict unless every earlier statement is provably read-only."""
     if not bare_view or ("*" not in bare_view and "?" not in bare_view):
         return False
-    if re.search(r"\bsetopt\b[^\n;&|]*\bNULL_GLOB\b", bare_view) or re.match(r"\s*noglob\b", bare_view):
+    # zsh option names ignore case and underscores: NULL_GLOB, nullglob and null_glob are one option
+    if re.search(r"(?i)\bsetopt\b[^\n;&|]*\bnull_?glob\b", bare_view) or re.match(r"\s*noglob\b", bare_view):
         return False
     view = re.sub(r"\[\[.*?\]\]", " ", bare_view, flags=re.S)  # a [[ ]] pattern matches a string, not the fs
     view = re.sub(r"\bcase\b.*?\besac\b", " ", view, flags=re.S)  # so does a case PATTERN
-    view = GLOB_QUALIFIED.sub(" ", view)                        # *.log(N) is deliberately null-globbed
+    if re.search(r"(?i)\bsetopt\b[^\n;&|]*\bbare_?glob_?qual\b", bare_view):
+        view = GLOB_QUALIFIED.sub(" ", view)                    # *.log(N) really is a qualifier now
+    else:
+        # The Bash tool runs zsh with bareglobqual OFF (measured 2026-11-25), so `*.log(N)` is a
+        # pattern with a group -- "ends in .logN" -- and aborts like any glob that matches nothing.
+        view = GLOB_QUALIFIED.sub(lambda m: re.sub(r"[()]", "", m.group(0)), view)
     view = BRACE_WORD.sub(" ", view)                           # brace expansion cannot be resolved here
     for m in GLOB_WORD.finditer(view):
         word = m.group(0)

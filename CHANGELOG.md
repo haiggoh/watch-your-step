@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.5] — 2026-11-25
+
+### Fixed — `zsh/unmatched-glob` stopped recommending `(N)`, which aborts in the Bash tool
+- Measured 2026-11-25: Claude Code's Bash tool runs zsh with `bareglobqual` OFF (plain `zsh -ic`
+  has it on; the shell snapshot never touches it). There `*.json(N)` is a pattern with a group,
+  "ends in `.jsonN`", and aborts with `no matches found` even when real `*.json` files exist.
+- The check now judges an `(…)`-qualified glob as that literal pattern instead of exempting it,
+  unless the command runs `setopt bareglobqual` (any spelling zsh accepts).
+- `setopt NULL_GLOB` is now recognised in every spelling zsh accepts (`nullglob`, `null_glob`),
+  and `setopt`/`unsetopt` count as read-only so a leading `setopt …;` no longer hides a verdict.
+- `fix:` and primer now point at `find -name` / `setopt NULL_GLOB` and warn that `(N)` fails.
+- Tests: 6 new/changed cases in `tests/test_unmatched_glob.py` (3 mutation-checked: bareglobqual
+  detection, literal-group positive control, nullglob spelling), `rm *.log(N)` case flipped to flag.
+
 ## [0.10.4] — 2026-11-19
 
 ### Added — `tool/shell-tool-casing` rule + primer line: the shell tool is `Bash` (capital B); a lowercase `bash` call fails with `No such tool available: bash`
