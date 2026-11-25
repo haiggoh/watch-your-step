@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.10.6] — 2026-11-25
+
+### Fixed — `scripts/build-portable.py` is executable (mode 100644 → 100755)
+- It has a shebang and its usage text reads `build-portable.py …`, but running it by path gave
+  `permission denied`. Mode-only change; no behaviour change for plugin users. Suite: 409 passed.
+
 ## [0.10.5] — 2026-11-25
 
 ### Fixed — `zsh/unmatched-glob` stopped recommending `(N)`, which aborts in the Bash tool
