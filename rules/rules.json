@@ -516,6 +516,16 @@
  "primer_notes": [
   "A blocked guard command ran NOTHING — apply its printed fix:; WYS_ALLOW_* only on explicit user say-so.",
   "rm inside a bash -c script is denied wholesale by the harness guard — use fresh mktemp names or direct rm.",
-  "git 100001 / gh -26276 under sandbox = SANDBOX, not auth; push already succeeded; gh fix: excludedCommands."
+  "git 100001 / gh -26276 under sandbox = SANDBOX, not auth; push already succeeded; gh fix: excludedCommands.",
+  "worktree .git is a FILE: git -C <wt> rev-parse --absolute-git-dir first — never concat <wt>/.git/ paths",
+  "~/ClaudeWorkspace = a folder of repos, not one repo; commit a moved folder only in a repo that tracked it",
+  "path/home-typo fires on ANY literal /Users/ in the command, even in grep patterns — [U]sers does not dodge it",
+  "env -u GH_TOKEN gh … = keyring gho_ token (repo scope) for PAT-403 writes; never run gh auth token",
+  "BSD sed 's/a/b/' with / in the text = 'bad flag in substitute command' rc=1 — use s|a|b| or the Edit tool",
+  "gh api Actions logs need --allow-escape-sequences (else rc=1 empty); quote ?ref= — zsh aborts the glob",
+  "gh api: -f sends strings, use -F for typed values; -f/-F flips GET to POST — add --method GET for list filters",
+  "/bin/bash is 3.2 (no declare -A); brew bash 5.3 is first on PATH — keep shipped scripts 3.2-compatible",
+  "Bash-tool PATH has plugin bins; spawned hooks don't — resolve ABSOLUTE paths, reproduce under env -i",
+  "exit-0 no-ops: cmd f>f truncates, grep -v rc=1 when empty, pipe RC is the last stage — log it, read EXIT:"
  ]
 }

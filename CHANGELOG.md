@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.10.8] — 2026-11-25
+
+### Added — 10 memory primer notes (run-5 §C migration, plan 2026-11-25-memory-plugin-primer Task 1)
+- `rules.json` `primer_notes` now carry the literal trigger vocabulary of the migrated MEMORY.md
+  entries, printed by the SessionStart `primer` command on both lanes: worktree `.git` is a file
+  (`git rev-parse --absolute-git-dir`, never concat `<wt>/.git/…`), `~/ClaudeWorkspace` is a folder
+  of repos, not a repo; `path/home-typo` fires on ANY literal home-path substring in the command
+  (bracket escapes do not dodge it); `env -u GH_TOKEN gh …` keyring fallback for PAT-403 writes;
+  BSD sed `bad flag in substitute command` → `s|a|b|`; gh api `--allow-escape-sequences`, `-F`
+  vs `-f`, `--method GET`; `/bin/bash` 3.2 vs brew bash 5.3 first on PATH; Bash-tool PATH vs
+  spawned hooks (`env -i` reproduction); exit-0 no-op one-liners (log it, read `EXIT:`).
+- Primer budget raised 2900 → 4000 chars in `tests/test_primer.py` — same move-bytes-from-index
+  rationale as the 2026-11-18 bump.
+- New `tests/test_memory_primers_20261125.py`: one parametrised test per line asserting the exact
+  token appears in the `primer` hook output, plus one parametrised case per lane (localhost proxy
+  and gateway base URL). RED before the lines landed (11 failed), mutation-checked: removing one
+  line turns the suite red, restore is byte-identical.
+
 ## [0.10.7] — 2026-11-25
 
 ### Added — `python/pytest-n-without-xdist` (block): `python3 -m pytest -n` where that Python has no xdist

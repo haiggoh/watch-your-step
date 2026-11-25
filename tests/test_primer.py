@@ -33,7 +33,9 @@ PRIMER_MAX_LINE = 110    # chars per rule's primer / note line
 # 2026-11-18: raised 2400 -> 2900 to absorb the 3 primer_notes migrated from memory
 # (guard-block remedy, harness rm-in-bash-c, sandbox git/gh) — they move bytes from the always-
 # loaded MEMORY.md index to here, so the always-loaded total barely changes.
-PRIMER_MAX_TOTAL = 2900  # chars for all primers + notes together (the injected block's budget)
+# 2026-11-25: raised 2900 -> 4000 to absorb the 10 run-5 §C memory primer notes
+# (plan 2026-11-25-memory-plugin-primer Task 1) — same move-bytes-from-index rationale.
+PRIMER_MAX_TOTAL = 4000  # chars for all primers + notes together (the injected block's budget)
 
 
 def test_every_rule_has_a_primer_within_budget():
