@@ -414,6 +414,23 @@
    "incident": "2026-11-08, csl knob-table mutations: four same-width table edits each imported the previous mutant's .pyc — two survived, one went red as the wrong mutant; the fix was already in memory (functional-verification) and still not applied."
   },
   {
+   "id": "python/pytest-n-without-xdist",
+   "severity": "block",
+   "stateful": true,
+   "tools": [
+    "Bash"
+   ],
+   "shells": [],
+   "context": [
+    "raw"
+   ],
+   "check": "pytest_n_without_xdist",
+   "message": "this interpreter's pytest has no pytest-xdist (probed: `import xdist` fails), so `-n` / `--numprocesses` is an unrecognized argument: pytest exits 4 (usage error) before collecting a single test — and a 4 read off a log or pipeline looks like a test verdict.",
+   "fix": "run the pytest that HAS xdist (often the PATH `pytest`, e.g. a pipx venv: `pytest -n auto …`), install pytest-xdist into this interpreter, or drop -n for a serial run",
+   "primer": "python3 -m pytest -n with no xdist in that Python exits 4 (usage), not a test result; use the PATH pytest.",
+   "incident": "2026-11-25, twice in one day (a get-haiggoh gate and a free-agents py3.9 run): `python3 -m pytest … -n` exited 4 and was misread as a test result, although memory machine-migration-restore already recorded the trap."
+  },
+  {
    "id": "shell/pipe-hides-exit",
    "severity": "warn",
    "tools": [

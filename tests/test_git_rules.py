@@ -17,7 +17,8 @@ TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored", "git/wor
           "git/pathspec-case", "git/switch-in-primary"}
 TESTED_ELSEWHERE = {"zsh/unmatched-glob",            # proven in tests/test_unmatched_glob.py
                     "tool/edit-anchor-mid-indent",   # proven in tests/test_tool_rules.py
-                    "shell/python-shebang-mismatch"} # proven in tests/test_shebang_rule.py
+                    "shell/python-shebang-mismatch", # proven in tests/test_shebang_rule.py
+                    "python/pytest-n-without-xdist"} # proven in tests/test_pytest_n_xdist.py
 MARKED = "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n"
 
 
