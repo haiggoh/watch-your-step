@@ -118,6 +118,60 @@ def test_push_ignores_ordinary_updates(guarded):
     assert wys.git_hook_push("origin", [f"refs/heads/main {tip} refs/heads/main {tip}"], str(guarded))[0] == 0
 
 
+# ---- non-fast-forward updates: the force-push guard --------------------------------------------
+
+def _push_then_amend(guarded, branch):
+    """Push `branch` to origin, then rewrite its tip with --amend; returns (old_tip, new_tip)."""
+    sh(guarded, "push", "-q", "origin", branch)
+    old = rev(guarded, branch)
+    sh(guarded, "switch", "-q", branch)
+    sh(guarded, "commit", "-q", "--amend", "-m", "rewritten")
+    new = rev(guarded, branch)
+    sh(guarded, "switch", "-q", "main")
+    return old, new
+
+
+def test_push_refuses_a_non_fast_forward_update(guarded):
+    old, new = _push_then_amend(guarded, "lonely")
+    code, msg = wys.git_hook_push("origin", [f"refs/heads/lonely {new} refs/heads/lonely {old}"], str(guarded))
+    assert code == 1
+    assert "refused force-pushing over origin/lonely" in msg
+    assert "WYS_ALLOW_FORCE_PUSH=1" in msg
+    assert "hook.wys-push-guard.enabled=false" in msg
+
+
+def test_push_allows_a_fast_forward_update(guarded):
+    old = rev(guarded, "main")
+    (guarded / "f").write_text("more\n")
+    sh(guarded, "commit", "-q", "-am", "more")
+    new = rev(guarded, "main")
+    assert wys.git_hook_push("origin", [f"refs/heads/main {new} refs/heads/main {old}"], str(guarded))[0] == 0
+
+
+def test_push_allows_creating_a_new_branch(guarded):
+    tip = rev(guarded, "lonely")
+    assert wys.git_hook_push("origin", [f"refs/heads/lonely {tip} refs/heads/lonely {Z}"], str(guarded))[0] == 0
+
+
+def test_push_refuses_when_remote_tip_is_unknown_here(guarded):
+    ghost = "1234567890abcdef1234567890abcdef12345678"
+    tip = rev(guarded, "main")
+    code, msg = wys.git_hook_push("origin", [f"refs/heads/main {tip} refs/heads/main {ghost}"], str(guarded))
+    assert code == 1
+    assert "git fetch" in msg
+
+
+def test_push_force_override_env_allows(guarded, monkeypatch):
+    old, new = _push_then_amend(guarded, "lonely")
+    monkeypatch.setenv("WYS_ALLOW_FORCE_PUSH", "1")
+    assert wys.git_hook_push("origin", [f"refs/heads/lonely {new} refs/heads/lonely {old}"], str(guarded))[0] == 0
+
+
+def test_push_non_ff_ignores_tags(guarded):
+    old, new = _push_then_amend(guarded, "lonely")
+    assert wys.git_hook_push("origin", [f"refs/tags/v1 {new} refs/tags/v1 {old}"], str(guarded))[0] == 0
+
+
 # ---- the command wrapper: env gates and fail-open ----------------------------------------------
 
 def test_wrapper_fails_open_on_an_internal_error(guarded, monkeypatch, capsys):
@@ -301,6 +355,28 @@ def test_e2e_python_subprocess_route_is_refused(live):
     subprocess.run([sys.executable, "-c", "import subprocess; subprocess.run(['git', 'branch', '-D', 'lonely'])"],
                    cwd=live, capture_output=True)
     assert exists(live, "lonely")
+
+
+def test_e2e_pre_push_refuses_force_push_over_a_published_branch(live):
+    sh(live, "push", "-q", "origin", "lonely")
+    old = rev(live, "lonely")
+    sh(live, "switch", "-q", "lonely")
+    sh(live, "commit", "-q", "--amend", "-m", "rewritten")
+    p = g(live, "push", "--force", "origin", "lonely")
+    assert p.returncode != 0
+    assert "refused force-pushing over origin/lonely" in p.stderr
+    remote = g(live, "ls-remote", "origin", "refs/heads/lonely").stdout.split()[0]
+    assert remote == old
+
+
+def test_e2e_pre_push_force_with_override_env_passes(live):
+    sh(live, "push", "-q", "origin", "lonely")
+    sh(live, "switch", "-q", "lonely")
+    sh(live, "commit", "-q", "--amend", "-m", "rewritten again")
+    p = g(live, "push", "--force", "origin", "lonely", env_extra={"WYS_ALLOW_FORCE_PUSH": "1"})
+    assert p.returncode == 0
+    remote = g(live, "ls-remote", "origin", "refs/heads/lonely").stdout.split()[0]
+    assert remote == rev(live, "lonely")
 
 
 def test_e2e_both_overrides_delete(live):
