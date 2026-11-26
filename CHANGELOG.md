@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0] — 2026-11-26
+
+### Added — `git/force-push-published` rule + pre-push refusal of non-fast-forward updates (plan 2026-11-26-merge-not-rebase-published-branches)
+
+- New rule `git/force-push-published` (block, stateful): a force-shaped push (`--force`/`-f`/`--force-with-lease`/`+refspec`) over a branch the remote already has fires only when the update is truly non-fast-forward. New-branch pushes, ff no-op forces, and the ship loop's unforced `BR:refs/heads/main` all pass. Overrides: `WYS_ALLOW_FORCE_PUSH=1`, `git -c hook.wys-push-guard.enabled=false`, `# wys:allow git/force-push-published`.
+- The git-level `pre-push` guard (`hook.wys-push-guard`) now also refuses a non-fast-forward UPDATE of an existing remote branch — the shape every force-push takes, forced or not (git rejects the unforced form only after the hook runs; measured 2026-11-26). A remote tip this repo has never fetched is refused with a `git fetch` hint. Overrides: `WYS_ALLOW_FORCE_PUSH=1` / `git -c hook.wys-push-guard.enabled=false`.
+- Primer budget raised 4000 → 4100 for the new primer line (dated comment in `tests/test_primer.py`).
+
 ## [0.10.9] — 2026-11-26
 
 ### Fixed — .gitignore covers .DS_Store

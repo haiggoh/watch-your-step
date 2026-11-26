@@ -225,3 +225,11 @@ which every ref deletion passes through, whatever started it. Two measured traps
 - **`git branch -m` deletes the old ref before it creates the new one.** At the moment the hook can still
   refuse, the new name does not exist, so the refs alone cannot tell a rename from a loss. The argv of the
   git process running the hook can.
+- **A published branch must be merged, not rebased (2026-11-26, free-agents release train).** F1 had to
+  enter the already-pushed R2 branch early; rebasing R2 would have needed a force-push, so R2 took F1 in
+  by merge. Measured the same day: git runs `pre-push` even for a non-forced non-ff push it rejects itself
+  afterwards, so the hook — not git's own refusal — is the choke point, and `git_hook_push` now refuses any
+  non-fast-forward update of an existing remote branch (`_non_ff`: remote tip absent locally → refuse with
+  a `git fetch` hint; not an ancestor of the local tip → refuse). A remote tip this repo has never fetched
+  is the worst case: we cannot see what a rewrite would discard. Overrides: `WYS_ALLOW_FORCE_PUSH=1`,
+  `git -c hook.wys-push-guard.enabled=false`.
