@@ -512,6 +512,7 @@ BRANCH_DELETE_LOCAL = re.compile(GIT_PREFIX + r"\s+branch\s+([^;&|\n]*)")
 PUSH_DELETE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
 PUSH_FORCE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
 FORCE_FLAGS = ("--force", "-f", "--force-with-lease")
+COMBINED_FORCE = re.compile(r"-[a-zA-Z]*f[a-zA-Z]*")   # a short cluster containing f: -qf, -fu
 ALLOW_ENV_FORCE = re.compile(r"(?:^|[\s;&|(])(?:export\s+)?WYS_ALLOW_FORCE_PUSH=1\b")
 BRANCH_DELETE_FLAGS = ("-d", "-D", "--delete")
 # The git guard's own overrides (0.6.0) also count as a deliberate deletion here, so the two layers
@@ -666,35 +667,51 @@ def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, lit_view=None,
 
 # ---- git/force-push-published: a force-shaped push over a branch the remote already has --------
 
-def _push_force_target(args, d):
-    """(remote, src, dest) for a force-shaped `git push` arg string, else None. Force-shaped = a
-    --force / -f / --force-with-lease flag or a leading-+ refspec. dest = the refspec destination,
-    else the named branch, else the current branch; src = the refspec source, else the same branch
-    (a bare name pushes local -> remote of the same name), else HEAD."""
+def _push_force_targets(args, d):
+    """[(remote, src, dest), ...] for a force-shaped `git push` arg string; [] when not force-shaped
+    or not resolvable. Force-shaped = a --force/-f/--force-with-lease flag, a short cluster
+    containing f (-qf), or a leading-+ refspec. --delete/-d pushes belong to the delete rule.
+    Every refspec is judged; a bare name pushes local -> remote of the same name; with no refspec
+    at all, the current branch. The remote defaults to remote.pushDefault, else the current
+    branch's upstream remote, else the only configured remote."""
     toks = [t for t in args.split() if t and not REDIRECT_TOK.match(t)]
+    if any(t in ("--delete", "-d") for t in toks):
+        return []                          # a deletion, forced or not: the delete rule owns it
     if not any(t in FORCE_FLAGS or t.startswith("--force-with-lease=")
-               or (t.startswith("+") and len(t) > 1) for t in toks):
-        return None
+               or COMBINED_FORCE.fullmatch(t) or (t.startswith("+") and len(t) > 1) for t in toks):
+        return []
     positional = [t for t in toks if not t.startswith("-")]
     if not positional or not all(_resolvable(t) for t in positional):
-        return None
-    remote = positional[0]
-    src = dest = None
-    for t in positional[1:]:
+        return []
+    remotes = (git(["remote"], d) or "").split()
+    if positional[0] in remotes:
+        remote, rest = positional[0], positional[1:]
+    else:
+        remote = (git(["config", "remote.pushDefault"], d) or "").strip() or None
+        if not remote:
+            up = (git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], d) or "").strip()
+            if up.startswith("refs/remotes/"):
+                remote = up.split("/")[2]
+        if not remote and len(remotes) == 1:
+            remote = remotes[0]
+        if not remote:
+            return []
+        rest = positional
+    pairs = []
+    for t in rest:
         if ":" in t:
             a, _, b = t.partition(":")
             if not a.lstrip("+"):
-                return None             # `:dest` deletes — the delete rule owns it
-            src, dest = a.lstrip("+"), b
-    if dest is None and len(positional) > 1:
-        dest = positional[1].lstrip("+")
-        src = src or dest
-    if dest is None or dest == "HEAD":
+                continue                   # `:dest` deletes — the delete rule owns it
+            pairs.append((a.lstrip("+"), b))
+        else:
+            pairs.append((t.lstrip("+"), t.lstrip("+")))
+    if not pairs:
         cur = git(["symbolic-ref", "--short", "-q", "HEAD"], d)
         if cur is None:
-            return None
-        dest, src = cur.strip(), "HEAD"
-    return remote, src, dest
+            return []
+        pairs = [("HEAD", cur.strip())]
+    return [(remote, src, dest) for src, dest in pairs]
 
 
 def check_force_push_published(texts, bare_view, cwd=None, lit_view=None, **_):
@@ -707,24 +724,23 @@ def check_force_push_published(texts, bare_view, cwd=None, lit_view=None, **_):
         d = resolve_dir(view[: m.start()], cdir, cwd)
         if not d:
             continue
-        target = _push_force_target(m.group(2), d)
-        if not target:
+        # the delete override (WYS_ALLOW_BRANCH_DELETE) must NOT suppress this rule — only the
+        # force-push override and the guard's own switch do (review finding, 2026-11-26)
+        if GUARD_OFF["push"] in cfg or ALLOW_ENV_FORCE.search(view[: m.start()]):
             continue
-        if _deliberate(view, m, "push", cfg) or ALLOW_ENV_FORCE.search(view[: m.start()]):
-            continue
-        remote, src, dest = target
-        if (d, remote, dest) in seen:
-            continue
-        seen.add((d, remote, dest))
-        name = dest[len("refs/heads/"):] if dest.startswith("refs/heads/") else dest
-        head, sha = _remote_state(d, remote, name, deadline)
-        if sha is None:
-            continue                      # not on the remote yet: a creation, nothing to overwrite
-        tip = git(["rev-parse", "--verify", "--quiet", f"{src}^{{commit}}"], d)
-        if tip is None:
-            continue                      # cannot resolve what is being pushed: no verdict
-        if _non_ff(d, sha, tip.strip()):
-            return True
+        for remote, src, dest in _push_force_targets(m.group(2), d):
+            if (d, remote, dest) in seen:
+                continue
+            seen.add((d, remote, dest))
+            name = dest[len("refs/heads/"):] if dest.startswith("refs/heads/") else dest
+            _, sha = _remote_state(d, remote, name, deadline)
+            if sha is None:
+                continue                  # not on the remote yet: a creation, nothing to overwrite
+            tip = git(["rev-parse", "--verify", "--quiet", f"{src}^{{commit}}"], d)
+            if tip is None:
+                continue                  # cannot resolve what is being pushed: no verdict
+            if _non_ff(d, sha, tip.strip()):
+                return True
     return False
 
 
@@ -1461,6 +1477,8 @@ def git_hook_push(remote, lines, d):
             continue
         name = remote_ref[len("refs/heads/"):]
         if _is_zero(local_oid):
+            if os.environ.get("WYS_ALLOW_BRANCH_DELETE") == "1":
+                continue                  # the delete override still covers deletions
             lost = (name in DEFAULT_NAMES
                     or unrecoverable(d, remote_oid, {f"refs/remotes/{remote}/{name}"}))
             if lost:
@@ -1488,7 +1506,11 @@ def git_hook_push(remote, lines, d):
 def cmd_git_hook(args, stdin_text, cwd):
     """`git-hook ref <phase>` / `git-hook push <remote> <url>`: what git's hooks run. Exits 0 on
     anything but a positive verdict — an internal error must never block git."""
-    if not os.environ.get("CLAUDECODE") or os.environ.get("WYS_ALLOW_BRANCH_DELETE") == "1":
+    if not os.environ.get("CLAUDECODE"):
+        return 0
+    # the branch-delete override covers the REF hook only; the push hook's delete branch reads it
+    # itself, so it must not disable the non-fast-forward refusal (review finding, 2026-11-26)
+    if args[:1] == ["ref"] and os.environ.get("WYS_ALLOW_BRANCH_DELETE") == "1":
         return 0
     try:
         lines = stdin_text.splitlines()
@@ -1523,8 +1545,11 @@ def guard_command(kind, script):
     The ref hook fires for EVERY ref update, so Python starts only when a stdin line is a
     refs/heads/ deletion (a zero NEW oid): 74 ms per transaction otherwise, against 9 ms with no
     guard. Outside Claude or with the script gone, nothing past the first tests runs."""
-    head = ('[ -n "$CLAUDECODE" ] || exit 0; [ "${WYS_ALLOW_BRANCH_DELETE:-}" = 1 ] && exit 0; '
-            f"f='{script}'; [ -f \"$f\" ] || exit 0; ")
+    # the ref hook honours the branch-delete override in its shell head; the push hook must NOT —
+    # its python side applies the override to deletions only, so non-ff refusals stay armed
+    head = ('[ -n "$CLAUDECODE" ] || exit 0; '
+            + ('[ "${WYS_ALLOW_BRANCH_DELETE:-}" = 1 ] && exit 0; ' if kind == "ref" else "")
+            + f"f='{script}'; [ -f \"$f\" ] || exit 0; ")
     if kind == "push":
         return head + 'exec python3 "$f" git-hook push'
     return (head + '[ "$1" = prepared ] || exit 0; l=$(cat); case "$l" in *" ' + ZERO_OID

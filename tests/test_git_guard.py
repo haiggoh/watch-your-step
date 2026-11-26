@@ -172,6 +172,25 @@ def test_push_non_ff_ignores_tags(guarded):
     assert wys.git_hook_push("origin", [f"refs/tags/v1 {new} refs/tags/v1 {old}"], str(guarded))[0] == 0
 
 
+def test_wrapper_push_kind_not_disabled_by_branch_delete_env(guarded, monkeypatch):
+    """Review finding 2026-11-26: WYS_ALLOW_BRANCH_DELETE covers DELETIONS only — it must not
+    silence the non-fast-forward refusal in the push hook."""
+    old, new = _push_then_amend(guarded, "lonely")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setenv("WYS_ALLOW_BRANCH_DELETE", "1")
+    code = wys.cmd_git_hook(["push", "origin"], f"refs/heads/lonely {new} refs/heads/lonely {old}\n", str(guarded))
+    assert code == 1
+
+
+def test_wrapper_push_delete_still_honours_branch_delete_env(guarded, monkeypatch):
+    sh(guarded, "push", "-q", "origin", "lonely")
+    tip = rev(guarded, "lonely")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setenv("WYS_ALLOW_BRANCH_DELETE", "1")
+    code = wys.cmd_git_hook(["push", "origin"], f"(delete) {Z} refs/heads/lonely {tip}\n", str(guarded))
+    assert code == 0
+
+
 # ---- the command wrapper: env gates and fail-open ----------------------------------------------
 
 def test_wrapper_fails_open_on_an_internal_error(guarded, monkeypatch, capsys):

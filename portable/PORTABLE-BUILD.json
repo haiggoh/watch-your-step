@@ -67,11 +67,11 @@
     ".claude-plugin/plugin.json": "88184b39b0662fcd04909e8ab3e3390cf9e2474bb7460da2be6111962e4ebd06",
     "hooks/hooks.json": "1d4dcbfada86a9a00af0317a56beaa67823abd9068e6f9f541167dca559d6874",
     "rules/rules.json": "58b0b0ed392c3b5f15b4ab0a0bca9ed6da0ffe6f5a48488f8cbb13e82d3f94da",
-    "scripts/watch-your-step.py": "006c97f6e4e1b2d7d03909971a29814c75e6cae0e554f8386c3560d82c77186d",
+    "scripts/watch-your-step.py": "0be93fa318d92657c9df2a886812a95580ccf001ce8e224d8c1fe12cbad9fc32",
     "skills/watch-your-step/SKILL.md": "7b64eecc99b3ee592d202bba8301a45f9adc1bbd77afdca7162ef5e4e2ecdcca"
   },
   "schema": "haiggoh-portable-build/1",
-  "source_commit": "eeb7c365e7cc358e0510399c59f17b12d5745cdc",
+  "source_commit": "efe1d991c72130f314666be5ecf62996591e3083",
   "source_repo": "haiggoh/watch-your-step",
   "transform_version": "1"
 }

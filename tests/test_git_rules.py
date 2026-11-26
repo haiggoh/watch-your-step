@@ -939,3 +939,32 @@ def test_force_push_follows_cd_and_dash_C(origin_repo, tmp_path):
 def test_force_push_with_unresolvable_refspec_passes(origin_repo):
     _amend_topic(origin_repo)
     assert not fired("git push --force origin $BR", origin_repo, RULE_FP)
+
+
+def test_force_push_is_not_suppressed_by_the_branch_delete_override(origin_repo):
+    # review finding 2026-11-26: the delete override must not silence the force-push rule
+    _amend_topic(origin_repo)
+    assert fired("WYS_ALLOW_BRANCH_DELETE=1 git push --force origin topic", origin_repo, RULE_FP)
+
+
+def test_force_push_combined_short_flag_blocks(origin_repo):
+    _amend_topic(origin_repo)
+    assert fired("git push -qf origin topic", origin_repo, RULE_FP)
+
+
+def test_force_push_checks_every_refspec(origin_repo):
+    _amend_topic(origin_repo)
+    sh(origin_repo, "checkout", "-q", "-b", "fresh")
+    sh(origin_repo, "checkout", "-q", "main")
+    assert fired("git push --force origin fresh topic", origin_repo, RULE_FP)
+
+
+def test_force_push_without_a_remote_uses_the_upstream(origin_repo):
+    _amend_topic(origin_repo)
+    assert fired("git push --force topic", origin_repo, RULE_FP)
+
+
+def test_force_delete_flag_is_not_judged_as_a_force_update(origin_repo):
+    # the delete rule owns --delete/-d pushes, even with --force present
+    _amend_topic(origin_repo)
+    assert not fired("git push --force origin --delete topic", origin_repo, RULE_FP)
