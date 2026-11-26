@@ -64,14 +64,14 @@
     }
   ],
   "files": {
-    ".claude-plugin/plugin.json": "09fe6486b9597802ff551be49b869dcc69fe90498b1ae5994bde83a87e54452f",
+    ".claude-plugin/plugin.json": "88184b39b0662fcd04909e8ab3e3390cf9e2474bb7460da2be6111962e4ebd06",
     "hooks/hooks.json": "1d4dcbfada86a9a00af0317a56beaa67823abd9068e6f9f541167dca559d6874",
-    "rules/rules.json": "6242e2bdf26511fe59fd20032adf376a543ccf3177fd5880d7f5f7ebdfea2ed9",
-    "scripts/watch-your-step.py": "ff7befaeef4233a59226c59f3b4e269e2d1816fb61c7b066c4c07742791fdb87",
+    "rules/rules.json": "b9ef69a098aee1bb1b081e57070f7eefdd91823d21955049d063dc23df301f17",
+    "scripts/watch-your-step.py": "006c97f6e4e1b2d7d03909971a29814c75e6cae0e554f8386c3560d82c77186d",
     "skills/watch-your-step/SKILL.md": "7b64eecc99b3ee592d202bba8301a45f9adc1bbd77afdca7162ef5e4e2ecdcca"
   },
   "schema": "haiggoh-portable-build/1",
-  "source_commit": "4a5017714ceb57a38a62b08891806d137196d2d6",
+  "source_commit": "77386c46add9a7debc9090f2cc01528b6b64f637",
   "source_repo": "haiggoh/watch-your-step",
   "transform_version": "1"
 }

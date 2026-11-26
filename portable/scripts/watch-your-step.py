@@ -510,6 +510,9 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
 GIT_PREFIX = r"\bgit((?:\s+-[Cc]\s+\S+)*)"
 BRANCH_DELETE_LOCAL = re.compile(GIT_PREFIX + r"\s+branch\s+([^;&|\n]*)")
 PUSH_DELETE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
+PUSH_FORCE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
+FORCE_FLAGS = ("--force", "-f", "--force-with-lease")
+ALLOW_ENV_FORCE = re.compile(r"(?:^|[\s;&|(])(?:export\s+)?WYS_ALLOW_FORCE_PUSH=1\b")
 BRANCH_DELETE_FLAGS = ("-d", "-D", "--delete")
 # The git guard's own overrides (0.6.0) also count as a deliberate deletion here, so the two layers
 # never disagree about what "I really mean it" looks like.
@@ -657,6 +660,70 @@ def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, lit_view=None,
             # breaks every consumer that resolves that name even though the local copy survives.
             return True
         if unrecoverable(d, sha, {f"refs/remotes/{remote}/{name}"}):
+            return True
+    return False
+
+
+# ---- git/force-push-published: a force-shaped push over a branch the remote already has --------
+
+def _push_force_target(args, d):
+    """(remote, src, dest) for a force-shaped `git push` arg string, else None. Force-shaped = a
+    --force / -f / --force-with-lease flag or a leading-+ refspec. dest = the refspec destination,
+    else the named branch, else the current branch; src = the refspec source, else the same branch
+    (a bare name pushes local -> remote of the same name), else HEAD."""
+    toks = [t for t in args.split() if t and not REDIRECT_TOK.match(t)]
+    if not any(t in FORCE_FLAGS or t.startswith("--force-with-lease=")
+               or (t.startswith("+") and len(t) > 1) for t in toks):
+        return None
+    positional = [t for t in toks if not t.startswith("-")]
+    if not positional or not all(_resolvable(t) for t in positional):
+        return None
+    remote = positional[0]
+    src = dest = None
+    for t in positional[1:]:
+        if ":" in t:
+            a, _, b = t.partition(":")
+            if not a.lstrip("+"):
+                return None             # `:dest` deletes — the delete rule owns it
+            src, dest = a.lstrip("+"), b
+    if dest is None and len(positional) > 1:
+        dest = positional[1].lstrip("+")
+        src = src or dest
+    if dest is None or dest == "HEAD":
+        cur = git(["symbolic-ref", "--short", "-q", "HEAD"], d)
+        if cur is None:
+            return None
+        dest, src = cur.strip(), "HEAD"
+    return remote, src, dest
+
+
+def check_force_push_published(texts, bare_view, cwd=None, lit_view=None, **_):
+    import time
+    view = lit_view if lit_view is not None else bare_view
+    deadline = time.monotonic() + LS_REMOTE_BUDGET
+    seen = set()
+    for m in PUSH_FORCE.finditer(view):
+        cdir, cfg = _git_opts(m.group(1))
+        d = resolve_dir(view[: m.start()], cdir, cwd)
+        if not d:
+            continue
+        target = _push_force_target(m.group(2), d)
+        if not target:
+            continue
+        if _deliberate(view, m, "push", cfg) or ALLOW_ENV_FORCE.search(view[: m.start()]):
+            continue
+        remote, src, dest = target
+        if (d, remote, dest) in seen:
+            continue
+        seen.add((d, remote, dest))
+        name = dest[len("refs/heads/"):] if dest.startswith("refs/heads/") else dest
+        head, sha = _remote_state(d, remote, name, deadline)
+        if sha is None:
+            continue                      # not on the remote yet: a creation, nothing to overwrite
+        tip = git(["rev-parse", "--verify", "--quiet", f"{src}^{{commit}}"], d)
+        if tip is None:
+            continue                      # cannot resolve what is being pushed: no verdict
+        if _non_ff(d, sha, tip.strip()):
             return True
     return False
 
@@ -1248,6 +1315,7 @@ CHECKS = {
     "stash_untracked": check_stash_untracked,
     "unquoted_var_arglist": check_unquoted_var_arglist,
     "branch_delete_unrecoverable": check_branch_delete_unrecoverable,
+    "force_push_published": check_force_push_published,
     "discards_uncommitted": check_discards_uncommitted,
     "python_shebang_mismatch": check_python_shebang_mismatch,
     "pytest_n_without_xdist": check_pytest_n_without_xdist,
@@ -1258,6 +1326,9 @@ CHECKS = {
 # A PreToolUse hook judges the command an agent TYPES; every other route to a branch deletion
 # ($VAR, bash -c, update-ref -d, a script, a Python subprocess) is invisible to it. Git's ref
 # transaction is the choke point all of them pass. Installed by `git-guard`, run only under Claude.
+# The same pre-push choke point also refuses a NON-fast-forward update of a branch that already
+# exists on the remote — the shape every force-push takes, forced or not (git rejects the
+# unforced form only after this hook has run, measured 2026-11-26).
 
 ZERO_OID = "0" * 40
 GUARD_NAMES = {"ref": "wys-branch-guard", "push": "wys-push-guard"}
@@ -1267,9 +1338,9 @@ def _is_zero(oid):
     return bool(oid) and not oid.strip("0")
 
 
-def _refusal(what, why, native, env):
+def _refusal(what, why, native, env, remedy="merge it or push it somewhere first"):
     return (f"{MARK}: ✖ refused {what} — {why}\n"
-            "  merge it or push it somewhere first; if you really mean it, either of:\n"
+            f"  {remedy}; if you really mean it, either of:\n"
             f"    {native}\n    {env}\n")
 
 
@@ -1366,25 +1437,51 @@ def git_hook_ref(phase, lines, d, renaming=False, packing=False):
                        f"WYS_ALLOW_BRANCH_DELETE=1 git branch -D {names}")
 
 
+def _non_ff(d, remote_oid, local_oid):
+    """True when pushing `local_oid` over `remote_oid` would be a NON-fast-forward update: the
+    remote tip is absent from this repository (the worst case — we cannot see what a rewrite would
+    discard) or is not an ancestor of the local tip. The absent case is checked first on purpose:
+    a force-push over commits this repo has never fetched is the one that loses work silently."""
+    if git(["cat-file", "-e", f"{remote_oid}^{{commit}}"], d) is None:
+        return True
+    return git(["merge-base", "--is-ancestor", remote_oid, local_oid], d) is None
+
+
 def git_hook_push(remote, lines, d):
     """(exit code, message) for one pre-push call: refuse deleting a remote branch whose commits
-    exist nowhere here outside refs/remotes/<remote>/<branch> itself."""
+    exist nowhere here outside refs/remotes/<remote>/<branch> itself, and refuse a
+    non-fast-forward UPDATE of a branch that already exists on the remote — the shape every
+    force-push takes, forced or not."""
     for ln in lines:
         f = ln.split()
         if len(f) < 4:
             continue
         _, local_oid, remote_ref, remote_oid = f[:4]
-        if not _is_zero(local_oid) or not remote_ref.startswith("refs/heads/"):
+        if not remote_ref.startswith("refs/heads/"):
             continue
         name = remote_ref[len("refs/heads/"):]
-        lost = (name in DEFAULT_NAMES
-                or unrecoverable(d, remote_oid, {f"refs/remotes/{remote}/{name}"}))
-        if lost:
-            why = ("it is a default branch every consumer resolves" if name in DEFAULT_NAMES
-                   else "its commits exist nowhere else in this repository")
-            return 1, _refusal(f"deleting {remote}/{name}", why,
-                               f"git -c hook.{GUARD_NAMES['push']}.enabled=false push {remote} --delete {name}",
-                               f"WYS_ALLOW_BRANCH_DELETE=1 git push {remote} --delete {name}")
+        if _is_zero(local_oid):
+            lost = (name in DEFAULT_NAMES
+                    or unrecoverable(d, remote_oid, {f"refs/remotes/{remote}/{name}"}))
+            if lost:
+                why = ("it is a default branch every consumer resolves" if name in DEFAULT_NAMES
+                       else "its commits exist nowhere else in this repository")
+                return 1, _refusal(f"deleting {remote}/{name}", why,
+                                   f"git -c hook.{GUARD_NAMES['push']}.enabled=false push {remote} --delete {name}",
+                                   f"WYS_ALLOW_BRANCH_DELETE=1 git push {remote} --delete {name}")
+            continue
+        if _is_zero(remote_oid) or os.environ.get("WYS_ALLOW_FORCE_PUSH") == "1":
+            continue                      # a new remote branch, or a deliberate rewrite: nothing to refuse
+        if _non_ff(d, remote_oid, local_oid):
+            if git(["cat-file", "-e", f"{remote_oid}^{{commit}}"], d) is None:
+                why = (f"{remote}/{name} now points at a commit this repository has never fetched — "
+                       f"git fetch, then merge {remote}/{name} in; do not rewrite it")
+            else:
+                why = "it would replace commits other clones may already have fetched"
+            return 1, _refusal(f"force-pushing over {remote}/{name}", why,
+                               f"git -c hook.{GUARD_NAMES['push']}.enabled=false push {remote} --force {name}",
+                               f"WYS_ALLOW_FORCE_PUSH=1 git push {remote} --force {name}",
+                               remedy="merge the remote's work in first (a merge only appends)")
     return 0, ""
 
 
