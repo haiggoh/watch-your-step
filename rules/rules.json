@@ -299,6 +299,23 @@
    "incident": "2026-10-27, porting run-to-completion's ship cleanup: a repo whose config names a default branch origin/HEAD does not point at (echoprism ships master) has no protection at all"
   },
   {
+   "id": "git/force-push-published",
+   "severity": "block",
+   "stateful": true,
+   "tools": [
+    "Bash"
+   ],
+   "shells": [],
+   "context": [
+    "raw"
+   ],
+   "check": "force_push_published",
+   "message": "this push rewrites a branch that already exists on the remote: --force / --force-with-lease / a +refspec replaces what others may have fetched, and git reports success.",
+   "fix": "bring the other work in with a merge instead (git merge origin/<branch>) — a merge only appends; rebase only branches that were never pushed. If the user explicitly asked for the rewrite, prefix WYS_ALLOW_FORCE_PUSH=1",
+   "primer": "Pushed branch? Take a predecessor in by MERGE; never rebase + force-push without the user's say-so.",
+   "incident": "2026-11-26, free-agents release train: F1 had to enter the already-pushed R2 branch early; a rebase would have needed a force-push, a merge did not (memory release-order-follows-branch-stack)"
+  },
+  {
    "id": "git/discards-uncommitted",
    "severity": "block",
    "stateful": true,

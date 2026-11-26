@@ -510,6 +510,9 @@ def check_worktree_remove_ignored(texts, bare_view, cwd=None, **_):
 GIT_PREFIX = r"\bgit((?:\s+-[Cc]\s+\S+)*)"
 BRANCH_DELETE_LOCAL = re.compile(GIT_PREFIX + r"\s+branch\s+([^;&|\n]*)")
 PUSH_DELETE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
+PUSH_FORCE = re.compile(GIT_PREFIX + r"\s+push\s+([^;&|\n]*)")
+FORCE_FLAGS = ("--force", "-f", "--force-with-lease")
+ALLOW_ENV_FORCE = re.compile(r"(?:^|[\s;&|(])(?:export\s+)?WYS_ALLOW_FORCE_PUSH=1\b")
 BRANCH_DELETE_FLAGS = ("-d", "-D", "--delete")
 # The git guard's own overrides (0.6.0) also count as a deliberate deletion here, so the two layers
 # never disagree about what "I really mean it" looks like.
@@ -657,6 +660,70 @@ def check_branch_delete_unrecoverable(texts, bare_view, cwd=None, lit_view=None,
             # breaks every consumer that resolves that name even though the local copy survives.
             return True
         if unrecoverable(d, sha, {f"refs/remotes/{remote}/{name}"}):
+            return True
+    return False
+
+
+# ---- git/force-push-published: a force-shaped push over a branch the remote already has --------
+
+def _push_force_target(args, d):
+    """(remote, src, dest) for a force-shaped `git push` arg string, else None. Force-shaped = a
+    --force / -f / --force-with-lease flag or a leading-+ refspec. dest = the refspec destination,
+    else the named branch, else the current branch; src = the refspec source, else the same branch
+    (a bare name pushes local -> remote of the same name), else HEAD."""
+    toks = [t for t in args.split() if t and not REDIRECT_TOK.match(t)]
+    if not any(t in FORCE_FLAGS or t.startswith("--force-with-lease=")
+               or (t.startswith("+") and len(t) > 1) for t in toks):
+        return None
+    positional = [t for t in toks if not t.startswith("-")]
+    if not positional or not all(_resolvable(t) for t in positional):
+        return None
+    remote = positional[0]
+    src = dest = None
+    for t in positional[1:]:
+        if ":" in t:
+            a, _, b = t.partition(":")
+            if not a.lstrip("+"):
+                return None             # `:dest` deletes — the delete rule owns it
+            src, dest = a.lstrip("+"), b
+    if dest is None and len(positional) > 1:
+        dest = positional[1].lstrip("+")
+        src = src or dest
+    if dest is None or dest == "HEAD":
+        cur = git(["symbolic-ref", "--short", "-q", "HEAD"], d)
+        if cur is None:
+            return None
+        dest, src = cur.strip(), "HEAD"
+    return remote, src, dest
+
+
+def check_force_push_published(texts, bare_view, cwd=None, lit_view=None, **_):
+    import time
+    view = lit_view if lit_view is not None else bare_view
+    deadline = time.monotonic() + LS_REMOTE_BUDGET
+    seen = set()
+    for m in PUSH_FORCE.finditer(view):
+        cdir, cfg = _git_opts(m.group(1))
+        d = resolve_dir(view[: m.start()], cdir, cwd)
+        if not d:
+            continue
+        target = _push_force_target(m.group(2), d)
+        if not target:
+            continue
+        if _deliberate(view, m, "push", cfg) or ALLOW_ENV_FORCE.search(view[: m.start()]):
+            continue
+        remote, src, dest = target
+        if (d, remote, dest) in seen:
+            continue
+        seen.add((d, remote, dest))
+        name = dest[len("refs/heads/"):] if dest.startswith("refs/heads/") else dest
+        head, sha = _remote_state(d, remote, name, deadline)
+        if sha is None:
+            continue                      # not on the remote yet: a creation, nothing to overwrite
+        tip = git(["rev-parse", "--verify", "--quiet", f"{src}^{{commit}}"], d)
+        if tip is None:
+            continue                      # cannot resolve what is being pushed: no verdict
+        if _non_ff(d, sha, tip.strip()):
             return True
     return False
 
@@ -1248,6 +1315,7 @@ CHECKS = {
     "stash_untracked": check_stash_untracked,
     "unquoted_var_arglist": check_unquoted_var_arglist,
     "branch_delete_unrecoverable": check_branch_delete_unrecoverable,
+    "force_push_published": check_force_push_published,
     "discards_uncommitted": check_discards_uncommitted,
     "python_shebang_mismatch": check_python_shebang_mismatch,
     "pytest_n_without_xdist": check_pytest_n_without_xdist,

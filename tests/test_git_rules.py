@@ -14,7 +14,7 @@ spec.loader.exec_module(wys)
 RULES = json.loads((ROOT / "rules" / "rules.json").read_text())["rules"]
 TESTED = {"git/staged-conflict-markers", "git/worktree-remove-ignored", "git/worktree-add-dirty",
           "git/stash-untracked", "git/branch-delete-unrecoverable", "git/discards-uncommitted",
-          "git/pathspec-case", "git/switch-in-primary"}
+          "git/pathspec-case", "git/switch-in-primary", "git/force-push-published"}
 TESTED_ELSEWHERE = {"zsh/unmatched-glob",            # proven in tests/test_unmatched_glob.py
                     "tool/edit-anchor-mid-indent",   # proven in tests/test_tool_rules.py
                     "shell/python-shebang-mismatch", # proven in tests/test_shebang_rule.py
@@ -869,3 +869,73 @@ def test_switch_in_primary_judges_the_C_target(tracked_playbook, tmp_path):
     sh(tracked_playbook, "worktree", "add", "-q", str(tmp_path / "wt"), "-b", "other")
     assert not fired(f"git -C {tmp_path}/wt switch -c x", tracked_playbook, RULE_SP)
     assert fired(f"git -C {tracked_playbook} switch -c y", tmp_path / "wt", RULE_SP)
+
+
+# ---- git/force-push-published: a force-shaped push over a branch the remote already has -------
+
+RULE_FP = "git/force-push-published"
+
+
+def _amend_topic(r):
+    """Push topic, then rewrite its tip with --amend — the shape every force-push takes."""
+    sh(r, "push", "-q", "origin", "topic")
+    sh(r, "checkout", "-q", "topic")
+    sh(r, "commit", "-q", "--amend", "-m", "rewritten")
+    sh(r, "checkout", "-q", "main")
+
+
+def test_force_push_of_a_published_branch_blocks(origin_repo):
+    _amend_topic(origin_repo)
+    assert fired("git push --force origin topic", origin_repo, RULE_FP)
+
+
+def test_force_with_lease_and_plus_refspec_block(origin_repo):
+    _amend_topic(origin_repo)
+    assert fired("git push --force-with-lease origin topic", origin_repo, RULE_FP)
+    assert fired("git push origin +topic", origin_repo, RULE_FP)
+    assert fired("git push --force origin HEAD:refs/heads/topic", origin_repo, RULE_FP)
+
+
+def test_force_push_of_a_branch_absent_on_the_remote_passes(origin_repo):
+    # Review Focus 1: a brand-new remote branch has nothing to overwrite, even with --force
+    sh(origin_repo, "checkout", "-q", "-b", "newb")
+    (origin_repo / "newb.txt").write_text("n\n")
+    sh(origin_repo, "add", "newb.txt")
+    sh(origin_repo, "commit", "-q", "-m", "newb")
+    assert not fired("git push --force origin newb", origin_repo, RULE_FP)
+
+
+def test_force_push_that_is_actually_fast_forward_passes(origin_repo):
+    # Review Focus 2: the remote tip is an ancestor of the local tip — a no-op force
+    sh(origin_repo, "push", "-q", "origin", "topic")
+    sh(origin_repo, "checkout", "-q", "topic")
+    (origin_repo / "unique.txt").write_text("more\n")
+    sh(origin_repo, "commit", "-q", "-am", "more")
+    sh(origin_repo, "checkout", "-q", "main")
+    assert not fired("git push --force origin topic", origin_repo, RULE_FP)
+
+
+def test_plain_fast_forward_refspec_push_passes(origin_repo):
+    # Review Focus 4: the ship loop's own unforced `git push origin <br>:refs/heads/main <tag>`
+    sh(origin_repo, "checkout", "-q", "main")
+    (origin_repo / "ok.txt").write_text("m2\n")
+    sh(origin_repo, "commit", "-q", "-am", "m2")
+    assert not fired("git push origin main:refs/heads/main v9.9.9", origin_repo, RULE_FP)
+
+
+def test_force_push_honours_both_overrides(origin_repo):
+    _amend_topic(origin_repo)
+    assert not fired("WYS_ALLOW_FORCE_PUSH=1 git push --force origin topic", origin_repo, RULE_FP)
+    assert not fired("git -c hook.wys-push-guard.enabled=false push --force origin topic", origin_repo, RULE_FP)
+    assert not fired("git push --force origin topic  # wys:allow git/force-push-published", origin_repo, RULE_FP)
+
+
+def test_force_push_follows_cd_and_dash_C(origin_repo, tmp_path):
+    _amend_topic(origin_repo)
+    assert fired(f"cd {origin_repo} && git push --force origin topic", tmp_path, RULE_FP)
+    assert fired(f"git -C {origin_repo} push --force origin topic", tmp_path, RULE_FP)
+
+
+def test_force_push_with_unresolvable_refspec_passes(origin_repo):
+    _amend_topic(origin_repo)
+    assert not fired("git push --force origin $BR", origin_repo, RULE_FP)
