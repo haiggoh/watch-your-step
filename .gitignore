@@ -6,3 +6,4 @@ __pycache__/
 .superpowers/
 dist/
 __pycache__/
+.DS_Store

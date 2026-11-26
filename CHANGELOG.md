@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.9] — 2026-11-26
+
+### Fixed — .gitignore covers .DS_Store
+
+- A stray Finder `.DS_Store` in the canonical checkout blocked a ship on 2026-11-25
+  (backed up to `~/.claude/backups/watch-your-step-DS_Store-20261125-185401`, then removed).
+  `.gitignore` now lists `.DS_Store`; verified with `git check-ignore -v .DS_Store`.
+
 ## [0.10.8] — 2026-11-25
 
 ### Added — 10 memory primer notes (run-5 §C migration, plan 2026-11-25-memory-plugin-primer Task 1)
